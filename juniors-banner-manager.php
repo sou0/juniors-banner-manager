@@ -1329,7 +1329,9 @@ class FunnelCTAManager {
                 var pos = $(this).data('pos');
                 var p = $(this).data('p');
 
-                $('#fcm-edit-post-id').val(id);
+                $('#fcm-edit-id').val(id);
+                $('#fcm-edit-type').val('post');
+                $('#fcm-edit-stage-wrapper').show();
                 $('#fcm-edit-stage').val(stage);
                 $('#fcm-edit-pos').val(pos || '').trigger('change');
                 $('#fcm-edit-p').val(p || 3);
@@ -1342,17 +1344,24 @@ class FunnelCTAManager {
             });
 
             $('#fcm-save-post-edit').click(function(){
-                var id = $('#fcm-edit-post-id').val();
-                var data = {
-                    action: 'fcm_save_post_edit',
-                    post_id: id,
-                    stage: $('#fcm-edit-stage').val(),
-                    pos: $('#fcm-edit-pos').val(),
-                    p: $('#fcm-edit-p').val()
-                };
-                $.post(ajaxurl, data, function(){
-                    location.reload();
-                });
+                var type = $('#fcm-edit-type').val();
+                var id = $('#fcm-edit-id').val();
+                
+                if (type === 'post') {
+                    var data = {
+                        action: 'fcm_save_post_edit',
+                        post_id: id,
+                        stage: $('#fcm-edit-stage').val(),
+                        pos: $('#fcm-edit-pos').val(),
+                        p: $('#fcm-edit-p').val()
+                    };
+                    $.post(ajaxurl, data, function(){
+                        location.reload();
+                    });
+                } else if (type === 'post-bulk') {
+                    // O handler de bulk já é definido dinamicamente no botão 'Aplicar'
+                    // mas vamos centralizar aqui para evitar o bug de .off().on()
+                }
             });
 
             $('#fcm-apply-list-bulk').click(function(){
@@ -1369,21 +1378,53 @@ class FunnelCTAManager {
                         location.reload();
                     });
                 } else if(action === 'edit') {
-                    $('#fcm-edit-post-id').val('bulk');
+                    $('#fcm-editor-title').text('Editar ' + ids.length + ' posts');
+                    $('#fcm-edit-type').val('post-bulk');
+                    $('#fcm-edit-id').val(ids.join(','));
+                    $('#fcm-edit-stage-wrapper').show();
                     $('#fcm-modal-editor').show();
-                    // Modificar o comportamento do botão salvar para bulk
+
                     $('#fcm-save-post-edit').off('click').on('click', function(){
-                        var bulkData = {
-                            action: 'fcm_bulk_action_classified',
-                            bulk_action: 'edit',
-                            post_ids: ids,
-                            stage: $('#fcm-edit-stage').val(),
-                            pos: $('#fcm-edit-pos').val(),
-                            p: $('#fcm-edit-p').val()
-                        };
-                        $.post(ajaxurl, bulkData, function(){
-                            location.reload();
-                        });
+                        var type = $('#fcm-edit-type').val();
+                        if (type === 'post-bulk') {
+                            var bulkData = {
+                                action: 'fcm_bulk_action_classified',
+                                bulk_action: 'edit',
+                                post_ids: ids,
+                                stage: $('#fcm-edit-stage').val(),
+                                pos: $('#fcm-edit-pos').val(),
+                                p: $('#fcm-edit-p').val()
+                            };
+                            $.post(ajaxurl, bulkData, function(){
+                                location.reload();
+                            });
+                        } else if (type === 'override-url') {
+                            var index = $('#fcm-edit-id').val();
+                            currentOverrideTargets[index].pos = $('#fcm-edit-pos').val();
+                            currentOverrideTargets[index].p = $('#fcm-edit-p').val();
+                            $('#fcm-modal-editor').hide();
+                            renderOverrideTargetsTable();
+                        } else if (type === 'override-url-bulk') {
+                            var selectedIndices = $('#fcm-edit-id').val().split(',').map(Number);
+                            selectedIndices.forEach(index => {
+                                currentOverrideTargets[index].pos = $('#fcm-edit-pos').val();
+                                currentOverrideTargets[index].p = $('#fcm-edit-p').val();
+                            });
+                            $('#fcm-modal-editor').hide();
+                            renderOverrideTargetsTable();
+                        } else {
+                            // Re-trigger o comportamento padrão para single post
+                            var data = {
+                                action: 'fcm_save_post_edit',
+                                post_id: id,
+                                stage: $('#fcm-edit-stage').val(),
+                                pos: $('#fcm-edit-pos').val(),
+                                p: $('#fcm-edit-p').val()
+                            };
+                            $.post(ajaxurl, data, function(){
+                                location.reload();
+                            });
+                        }
                     });
                 }
             });
