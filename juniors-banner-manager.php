@@ -148,6 +148,7 @@ class FunnelCTAManager {
                 'image' => sanitize_text_field($_POST['cb_image']),
                 'image_mobile' => isset($_POST['cb_image_mobile']) ? sanitize_text_field($_POST['cb_image_mobile']) : '',
                 'url' => sanitize_text_field($_POST['cb_url']),
+                'css' => isset($_POST['cb_css']) ? sanitize_text_field(wp_unslash($_POST['cb_css'])) : '',
                 'html' => wp_unslash($_POST['cb_html']), 
                 'schedule' => isset($_POST['cb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['cb_start']),
@@ -190,6 +191,7 @@ class FunnelCTAManager {
                 'image' => sanitize_text_field($_POST['scb_image']),
                 'image_mobile' => isset($_POST['scb_image_mobile']) ? sanitize_text_field($_POST['scb_image_mobile']) : '',
                 'url' => sanitize_text_field($_POST['scb_url']),
+                'css' => isset($_POST['scb_css']) ? sanitize_text_field(wp_unslash($_POST['scb_css'])) : '',
                 'html' => wp_unslash($_POST['scb_html']), 
                 'schedule' => isset($_POST['scb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['scb_start']),
@@ -339,6 +341,7 @@ class FunnelCTAManager {
                         
                         $pos = isset($options[$key . '_position']) ? $options[$key . '_position'] : 'middle';
                         $p_count = isset($options[$key . '_paragraph']) ? $options[$key . '_paragraph'] : 3;
+                        $custom_css = isset($options[$key . '_css']) ? $options[$key . '_css'] : '';
                     ?>
                     <!-- TAB: <?php echo esc_html($label); ?> -->
                     <div id="tab-<?php echo esc_attr($key); ?>" class="tab-content" style="display: <?php echo $active_tab === $key ? 'block' : 'none'; ?>;">
@@ -414,6 +417,10 @@ class FunnelCTAManager {
                                     <div style="margin-top: 15px;">
                                         <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
                                         <input type="url" name="fcm_settings[<?php echo esc_attr($key . '_url'); ?>]" value="<?php echo esc_url($link_url); ?>" class="regular-text" placeholder="https://exemplo.com/pagina">
+                                    </div>
+                                    <div style="margin-top: 15px;">
+                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">CSS Personalizado para Imagem (Ex: border-radius: 10px; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);):</label>
+                                        <textarea name="fcm_settings[<?php echo esc_attr($key . '_css'); ?>]" rows="2" class="regular-text code" placeholder="CSS embutido aplicado na imagem..."><?php echo esc_textarea($custom_css); ?></textarea>
                                     </div>
                                 </td>
                             </tr>
@@ -659,6 +666,10 @@ class FunnelCTAManager {
                                         <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
                                         <input type="url" name="cb_url" id="cb_url" class="regular-text" placeholder="https://exemplo.com/pagina">
                                     </div>
+                                    <div style="margin-top: 15px;">
+                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">CSS Personalizado para Imagem:</label>
+                                        <textarea name="cb_css" id="cb_css" rows="2" class="regular-text code" placeholder="Ex: border-radius: 20px;"></textarea>
+                                    </div>
                                 </td>
                             </tr>
 
@@ -851,6 +862,10 @@ class FunnelCTAManager {
                                     <div style="margin-top: 15px;">
                                         <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
                                         <input type="url" name="scb_url" id="scb_url" class="regular-text" placeholder="https://exemplo.com/pagina">
+                                    </div>
+                                    <div style="margin-top: 15px;">
+                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">CSS Personalizado para Imagem:</label>
+                                        <textarea name="scb_css" id="scb_css" rows="2" class="regular-text code" placeholder="Ex: border-radius: 20px;"></textarea>
                                     </div>
                                 </td>
                             </tr>
@@ -1111,6 +1126,7 @@ class FunnelCTAManager {
                 $('#cb_image_mobile').val('');
                 $('#cb_image_mobile_preview').hide().attr('src', '');
                 $('#cb_url').val('');
+                $('#cb_css').val('');
                 $('#cb_html').val('');
                 $('#cb_schedule').prop('checked', false).trigger('change');
                 $('#cb_allow_multiple').prop('checked', false);
@@ -1148,6 +1164,7 @@ class FunnelCTAManager {
                 }
                 
                 $('#cb_url').val(data.url);
+                $('#cb_css').val(data.css || '');
                 $('#cb_html').val(data.html);
                 
                 $('#cb_schedule').prop('checked', data.schedule == 1).trigger('change');
@@ -1182,6 +1199,7 @@ class FunnelCTAManager {
                 $('#scb_image_mobile').val('');
                 $('#scb_image_mobile_preview').hide().attr('src', '');
                 $('#scb_url').val('');
+                $('#scb_css').val('');
                 $('#scb_html').val('');
                 $('#scb_schedule').prop('checked', false).trigger('change');
                 $('#scb_start').val('');
@@ -1215,6 +1233,7 @@ class FunnelCTAManager {
                 }
                 
                 $('#scb_url').val(data.url);
+                $('#scb_css').val(data.css || '');
                 $('#scb_html').val(data.html);
                 
                 $('#scb_schedule').prop('checked', data.schedule == 1).trigger('change');
@@ -1375,7 +1394,8 @@ class FunnelCTAManager {
             
             $desktop_url = wp_get_attachment_url($img_id);
             $alt_text = get_post_meta($img_id, '_wp_attachment_image_alt', true);
-            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">';
+            $custom_css = isset($options[$prefix . '_css']) ? $options[$prefix . '_css'] : '';
+            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto; ' . esc_attr($custom_css) . '">';
             
             $mobile_img_id = isset($options[$prefix . '_mobile']) ? $options[$prefix . '_mobile'] : '';
             $url = isset($options[$prefix . '_url']) ? $options[$prefix . '_url'] : '#';
@@ -1411,7 +1431,8 @@ class FunnelCTAManager {
             
             $desktop_url = wp_get_attachment_url($cb['image']);
             $alt_text = get_post_meta($cb['image'], '_wp_attachment_image_alt', true);
-            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">';
+            $custom_css = isset($cb['css']) ? $cb['css'] : '';
+            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto; ' . esc_attr($custom_css) . '">';
             
             $mobile_img_id = isset($cb['image_mobile']) ? $cb['image_mobile'] : '';
             
@@ -1686,7 +1707,8 @@ class FunnelCTAManager {
             if (!$desktop_url) return '';
             
             $alt_text = get_post_meta($scb['image'], '_wp_attachment_image_alt', true);
-            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">';
+            $custom_css = isset($scb['css']) ? $scb['css'] : '';
+            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto; ' . esc_attr($custom_css) . '">';
             
             $mobile_img_id = isset($scb['image_mobile']) ? $scb['image_mobile'] : '';
             $img_html = '';
