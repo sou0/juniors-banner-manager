@@ -147,8 +147,34 @@ class FunnelCTAManager {
         return $sanitized;
     }
 
-    private function render_random_editor_html($key, $device, $data) {
+    private function render_random_editor_html($key, $device, $data, $options = []) {
         $items = $data ?? [];
+        
+        // Se novos dados estão vazios, tenta migrar do formato antigo
+        if (empty($items) && !empty($options)) {
+            if ($device === 'desktop') {
+                $img_id = $options[$key] ?? '';
+                if ($img_id) {
+                    $items[] = [
+                        'type' => 'image',
+                        'image' => $img_id,
+                        'url' => $options[$key . '_url'] ?? '#',
+                        'css' => $options[$key . '_css'] ?? ''
+                    ];
+                }
+            } else {
+                $img_id = $options[$key . '_mobile'] ?? '';
+                if ($img_id) {
+                    $items[] = [
+                        'type' => 'image',
+                        'image' => $img_id,
+                        'url' => $options[$key . '_url'] ?? '#',
+                        'css' => $options[$key . '_css'] ?? ''
+                    ];
+                }
+            }
+        }
+
         $html = '<div class="fcm-random-container" data-key="' . $key . '" data-device="' . $device . '">';
         $html .= '<div class="fcm-random-entries-list">';
         foreach ($items as $index => $item) {
@@ -449,11 +475,11 @@ class FunnelCTAManager {
                         <div style="display:flex; gap:20px; flex-wrap:wrap;">
                             <div style="flex:1; min-width:300px; background:#fff; padding:15px; border:1px solid #ddd; border-radius:5px;">
                                 <h3 style="margin-top:0;">Desktop (Entradas Randômicas)</h3>
-                                <?php echo $this->render_random_editor_html($key, 'desktop', $options[$key . '_desktop_data'] ?? []); ?>
+                                <?php echo $this->render_random_editor_html($key, 'desktop', $options[$key . '_desktop_data'] ?? [], $options); ?>
                             </div>
                             <div style="flex:1; min-width:300px; background:#fff; padding:15px; border:1px solid #ddd; border-radius:5px;">
                                 <h3 style="margin-top:0;">Mobile (Entradas Randômicas)</h3>
-                                <?php echo $this->render_random_editor_html($key, 'mobile', $options[$key . '_mobile_data'] ?? []); ?>
+                                <?php echo $this->render_random_editor_html($key, 'mobile', $options[$key . '_mobile_data'] ?? [], $options); ?>
                             </div>
                         </div>
 
@@ -1118,7 +1144,7 @@ class FunnelCTAManager {
                 $('.fcm-main-type-' + $(this).val() + '-' + key).show();
             });
 
-            $('.fcm-upload-btn').click(function(e){
+            $(document).on('click', '.fcm-upload-btn', function(e){
                 var btn = $(this);
                 var uploader = wp.media({title: 'Escolher Imagem', button: {text: 'Usar Imagem'}, multiple: false}).on('select', function() {
                     var attachment = uploader.state().get('selection').first().toJSON();
@@ -1127,7 +1153,7 @@ class FunnelCTAManager {
                 }).open();
             });
 
-            $('.fcm-remove-btn').click(function(){
+            $(document).on('click', '.fcm-remove-btn', function(){
                 $(this).siblings('.fcm-preview').hide();
                 $(this).siblings('.fcm-img-id').val('');
             });
@@ -1171,21 +1197,37 @@ class FunnelCTAManager {
                 $('#cb_name').val(data.name);
                 $('#cb_status').val(data.status);
                 
-                var desktopHtml = '<div class="fcm-random-container" data-key="cb" data-device="desktop"><div class="fcm-random-entries-list">';
-                if(data.desktop_data) {
-                    data.desktop_data.forEach(function(item, index) {
-                        desktopHtml += createRandomEntryRow('cb', 'desktop', index, item);
+                var desktopData = data.desktop_data || [];
+                if(desktopData.length === 0 && data.image) {
+                    desktopData.push({
+                        'type': data.type || 'image',
+                        'image': data.image,
+                        'url': data.url || '#',
+                        'css': data.css || ''
                     });
                 }
+
+                var mobileData = data.mobile_data || [];
+                if(mobileData.length === 0 && (data.image_mobile || data.image)) {
+                    mobileData.push({
+                        'type': data.type || 'image',
+                        'image': data.image_mobile || data.image,
+                        'url': data.url || '#',
+                        'css': data.css || ''
+                    });
+                }
+
+                var desktopHtml = '<div class="fcm-random-container" data-key="cb" data-device="desktop"><div class="fcm-random-entries-list">';
+                desktopData.forEach(function(item, index) {
+                    desktopHtml += createRandomEntryRow('cb', 'desktop', index, item);
+                });
                 desktopHtml += '</div><button type="button" class="button button-secondary fcm-add-random-entry" style="margin-top:10px;">+ Adicionar Entrada (Desktop)</button></div>';
                 $('#cb-random-desktop-container').html(desktopHtml);
 
                 var mobileHtml = '<div class="fcm-random-container" data-key="cb" data-device="mobile"><div class="fcm-random-entries-list">';
-                if(data.mobile_data) {
-                    data.mobile_data.forEach(function(item, index) {
-                        mobileHtml += createRandomEntryRow('cb', 'mobile', index, item);
-                    });
-                }
+                mobileData.forEach(function(item, index) {
+                    mobileHtml += createRandomEntryRow('cb', 'mobile', index, item);
+                });
                 mobileHtml += '</div><button type="button" class="button button-secondary fcm-add-random-entry" style="margin-top:10px;">+ Adicionar Entrada (Mobile)</button></div>';
                 $('#cb-random-mobile-container').html(mobileHtml);
 
@@ -1236,21 +1278,37 @@ class FunnelCTAManager {
                 $('#scb_name').val(data.name);
                 $('#scb_status').val(data.status);
                 
-                var desktopHtml = '<div class="fcm-random-container" data-key="scb" data-device="desktop"><div class="fcm-random-entries-list">';
-                if(data.desktop_data) {
-                    data.desktop_data.forEach(function(item, index) {
-                        desktopHtml += createRandomEntryRow('scb', 'desktop', index, item);
+                var desktopData = data.desktop_data || [];
+                if(desktopData.length === 0 && data.image) {
+                    desktopData.push({
+                        'type': data.type || 'image',
+                        'image': data.image,
+                        'url': data.url || '#',
+                        'css': data.css || ''
                     });
                 }
+
+                var mobileData = data.mobile_data || [];
+                if(mobileData.length === 0 && (data.image_mobile || data.image)) {
+                    mobileData.push({
+                        'type': data.type || 'image',
+                        'image': data.image_mobile || data.image,
+                        'url': data.url || '#',
+                        'css': data.css || ''
+                    });
+                }
+
+                var desktopHtml = '<div class="fcm-random-container" data-key="scb" data-device="desktop"><div class="fcm-random-entries-list">';
+                desktopData.forEach(function(item, index) {
+                    desktopHtml += createRandomEntryRow('scb', 'desktop', index, item);
+                });
                 desktopHtml += '</div><button type="button" class="button button-secondary fcm-add-random-entry" style="margin-top:10px;">+ Adicionar Entrada (Desktop)</button></div>';
                 $('#scb-random-desktop-container').html(desktopHtml);
 
                 var mobileHtml = '<div class="fcm-random-container" data-key="scb" data-device="mobile"><div class="fcm-random-entries-list">';
-                if(data.mobile_data) {
-                    data.mobile_data.forEach(function(item, index) {
-                        mobileHtml += createRandomEntryRow('scb', 'mobile', index, item);
-                    });
-                }
+                mobileData.forEach(function(item, index) {
+                    mobileHtml += createRandomEntryRow('scb', 'mobile', index, item);
+                });
                 mobileHtml += '</div><button type="button" class="button button-secondary fcm-add-random-entry" style="margin-top:10px;">+ Adicionar Entrada (Mobile)</button></div>';
                 $('#scb-random-mobile-container').html(mobileHtml);
 
