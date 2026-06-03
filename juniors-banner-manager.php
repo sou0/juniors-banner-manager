@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Funnel CTA Manager Pro
+ * Plugin Name: Junior's Banner Manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
  * Version: 2.6
  * Author: junior
@@ -13,9 +13,9 @@ require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $myUpdateChecker = PucFactory::buildUpdateChecker(
-	'https://github.com/sou0/banner-manager/',
+	'https://github.com/sou0/juniors-banner-manager/',
 	__FILE__,
-	'banner-manager'
+	'juniors-banner-manager'
 );
 $myUpdateChecker->setBranch('main');
 
