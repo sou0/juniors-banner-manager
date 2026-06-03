@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Junior's Banner Manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 3.0
+ * Version: 3.1
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -99,24 +99,30 @@ class FunnelCTAManager {
         foreach ($custom_banners as $cb) {
             if ($cb['status'] !== 'active') continue;
             
-            $targets = array_map('trim', explode("\n", $cb['targets']));
-            $targets = array_filter($targets);
-            if (empty($targets)) continue;
+            $targets_data = $cb['targets'] ?? [];
+            $targets_urls = [];
+            if (is_array($targets_data)) {
+                foreach($targets_data as $t) if(!empty($t['url'])) $targets_urls[] = $t['url'];
+            } else {
+                $targets_urls = array_filter(array_map('trim', explode("\n", (string)$targets_data)));
+            }
+
+            if (empty($targets_urls)) continue;
 
             $allow_multiple = !empty($cb['allow_multiple']);
             
             $html .= '<li style="background:#fff; border-left:4px solid '.($allow_multiple ? '#2271b1' : '#d63638').'; padding:15px; margin-bottom:10px; border-radius:4px; box-shadow:0 1px 1px rgba(0,0,0,0.04);">';
             $html .= '<strong>Banner de Override: ' . esc_html($cb['name']) . '</strong><br>';
             if (!$allow_multiple) {
-                $html .= '⚠️ Este banner está configurado como <strong>EXCLUSIVO</strong>. Ele está <strong>bloqueando / engolindo TODOS os outros banners</strong> (Global e Estágios) em <strong>' . count($targets) . ' links</strong>. ';
+                $html .= '⚠️ Este banner está configurado como <strong>EXCLUSIVO</strong>. Ele está <strong>bloqueando / engolindo TODOS os outros banners</strong> (Global e Estágios) em <strong>' . count($targets_urls) . ' links</strong>. ';
             } else {
-                $html .= 'ℹ️ Este banner permite múltiplos simultâneos, porém <strong>irá bloquear e sobrescrever qualquer outro banner que tente usar a posição (' . esc_html($cb['position'] ?? 'middle') . ')</strong> nos seus <strong>' . count($targets) . ' links</strong> afetados. ';
+                $html .= 'ℹ️ Este banner permite múltiplos simultâneos, porém <strong>irá bloquear e sobrescrever qualquer outro banner que tente usar a posição (' . esc_html($cb['position'] ?? 'middle') . ')</strong> nos seus <strong>' . count($targets_urls) . ' links</strong> afetados. ';
             }
             $html .= '<br><a href="#" onclick="jQuery(this).next(\'div\').slideToggle(); return false;">Exibir/Ocultar links afetados</a>';
             $html .= ' | <a href="#" class="btn-edit-custom-banner" data-banner=\''.esc_attr(json_encode($cb)).'\'>Configurar este Banner</a>';
             
             $html .= '<div style="display:none; margin-top:10px; background:#f9f9f9; padding:10px; border:1px solid #eee;">';
-            foreach ($targets as $t) {
+            foreach ($targets_urls as $t) {
                 $html .= '<code style="display:block; margin-bottom:3px;">' . esc_html($t) . '</code>';
             }
             $html .= '</div>';
@@ -363,7 +369,7 @@ class FunnelCTAManager {
         $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'dashboard';
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Junior's Banner Manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">v3.0</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's Banner Manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">v3.1</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
@@ -1874,7 +1880,9 @@ class FunnelCTAManager {
        3. LÓGICA DE INJEÇÃO (OVERRIDE CUSTOM BANNERS -> FUNIL -> POSICIONAMENTO)
     ---------------------------------------------------------------------------- */
     private function is_banner_active($options, $stage) {
-        if (empty($options[$stage])) return false;
+        $has_data = !empty($options[$stage . '_desktop_data']) || !empty($options[$stage . '_mobile_data']) || !empty($options[$stage]);
+        if (!$has_data) return false;
+        
         if (!empty($options[$stage . '_schedule'])) {
             $now = time();
             $start = !empty($options[$stage . '_start']) ? $this->get_utc_timestamp($options[$stage . '_start']) : 0;
@@ -2115,13 +2123,21 @@ class FunnelCTAManager {
             var mainContainer = null;
             var maxP = 0;
 
+            // Prioridade para seletores mais específicos
             for (var i = 0; i < selectors.length; i++) {
                 var els = document.querySelectorAll(selectors[i]);
                 els.forEach(function(el) {
+                    // Ignorar se o elemento estiver oculto
+                    if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
+                    
                     var pList = el.querySelectorAll('p');
                     if (pList.length > maxP) {
                         maxP = pList.length;
                         mainContainer = el;
+                    }
+                    // Fallback: Se ainda não temos container, pegamos o primeiro que aparecer mesmo sem <p>
+                    if (!mainContainer && els.length > 0) {
+                        mainContainer = els[0];
                     }
                 });
             }
@@ -2150,7 +2166,13 @@ class FunnelCTAManager {
                 randomItem.style.textAlign = 'center';
 
                 if (b.pos === 'top') {
-                    mainContainer.insertBefore(randomItem, mainContainer.firstChild);
+                    // Tentar inserir antes do primeiro parágrafo ou título para evitar ficar acima do cabeçalho do post
+                    var firstContent = mainContainer.querySelector('p, h1, h2, h3, h4, h5, h6, ul, ol, img');
+                    if (firstContent) {
+                        mainContainer.insertBefore(randomItem, firstContent);
+                    } else {
+                        mainContainer.insertBefore(randomItem, mainContainer.firstChild);
+                    }
                     return;
                 }
                 if (b.pos === 'bottom') {
