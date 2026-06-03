@@ -13,7 +13,7 @@ require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $myUpdateChecker = PucFactory::buildUpdateChecker(
-	'https://github.com/SEU-USUARIO/banner-manager/',
+	'https://github.com/sou0/banner-manager/',
 	__FILE__,
 	'banner-manager'
 );
