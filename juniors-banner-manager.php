@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Junior's Banner Manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 2.9
+ * Version: 3.0
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -40,6 +40,9 @@ class FunnelCTAManager {
         add_action('wp_ajax_fcm_import_csv', [$this, 'handle_csv_import']);
         add_action('wp_ajax_fcm_search_posts', [$this, 'handle_post_search']);
         add_action('wp_ajax_fcm_analyze_conflicts', [$this, 'handle_conflict_analysis']);
+        add_action('wp_ajax_fcm_remove_classified', [$this, 'handle_remove_classified']);
+        add_action('wp_ajax_fcm_bulk_action_classified', [$this, 'handle_bulk_action_classified']);
+        add_action('wp_ajax_fcm_save_post_edit', [$this, 'handle_save_post_edit']);
 
         // Registrar Shortcodes do Cronômetro
         add_shortcode('fcm_ano', [$this, 'render_countdown_ano']);
@@ -251,7 +254,7 @@ class FunnelCTAManager {
                 'position' => isset($_POST['cb_position']) ? sanitize_text_field($_POST['cb_position']) : 'middle',
                 'allow_multiple' => isset($_POST['cb_allow_multiple']) ? 1 : 0,
                 'paragraph' => isset($_POST['cb_paragraph']) ? intval($_POST['cb_paragraph']) : 3,
-                'targets' => sanitize_textarea_field($_POST['cb_targets']),
+                'targets' => isset($_POST['cb_targets_json']) ? json_decode(wp_unslash($_POST['cb_targets_json']), true) : [],
                 'schedule' => isset($_POST['cb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['cb_start']),
                 'end' => sanitize_text_field($_POST['cb_end']),
@@ -360,7 +363,7 @@ class FunnelCTAManager {
         $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'dashboard';
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Junior's Banner Manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">v2.9</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's Banner Manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">v3.0</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
@@ -754,8 +757,48 @@ class FunnelCTAManager {
                             <tr>
                                 <th scope="row"><label>Links Alvo (Onde exibir?)</label></th>
                                 <td>
-                                    <textarea name="cb_targets" id="cb_targets" rows="5" class="large-text" placeholder="/url-do-post-1/&#10;/url-do-post-2/"></textarea>
-                                    <p class="description">Cole as URLs dos posts onde este banner deve aparecer. Ele <strong>sobrescreverá</strong> o funil nessas URLs.</p>
+                                    <div style="background: #f9f9f9; padding: 15px; border: 1px solid #ccc; border-radius: 4px;">
+                                        <div style="display:flex; gap:10px; margin-bottom:15px;">
+                                            <input type="text" id="fcm-new-target-url" class="regular-text" placeholder="URL ou Slug do post" style="flex:1;">
+                                            <button type="button" id="fcm-add-target-btn" class="button">Adicionar</button>
+                                        </div>
+                                        <div style="margin-bottom:15px;">
+                                            <label style="font-weight:bold; display:block; margin-bottom:5px;">Adicionar em Massa (URLs separadas por linha ou vírgula):</label>
+                                            <textarea id="fcm-bulk-targets-text" rows="3" style="width:100%;" placeholder="https://exemplo.com/post-1/&#10;https://exemplo.com/post-2/"></textarea>
+                                            <button type="button" id="fcm-add-bulk-targets-btn" class="button" style="margin-top:5px;">Adicionar em Massa</button>
+                                        </div>
+                                        <div style="margin-bottom:15px;">
+                                            <label style="font-weight:bold; display:block; margin-bottom:5px;">Importar via CSV:</label>
+                                            <input type="file" id="fcm-override-csv" accept=".csv">
+                                            <button type="button" id="fcm-import-override-csv-btn" class="button">Importar CSV</button>
+                                        </div>
+
+                                        <hr>
+
+                                        <div style="display:flex; justify-content: space-between; align-items: center; margin: 15px 0;">
+                                            <h4 style="margin:0;">URLs Selecionadas:</h4>
+                                            <div id="fcm-override-bulk-actions" style="display:none;">
+                                                <button type="button" id="fcm-override-bulk-edit" class="button button-small">Editar Selecionados</button>
+                                                <button type="button" id="fcm-override-bulk-remove" class="button button-small" style="color:red;">Remover Selecionados</button>
+                                            </div>
+                                        </div>
+
+                                        <table class="wp-list-table widefat fixed striped" style="margin-top: 10px;">
+                                            <thead>
+                                                <tr>
+                                                    <th style="width:30px;"><input type="checkbox" id="fcm-override-select-all"></th>
+                                                    <th>URL / Slug</th>
+                                                    <th>Posição (Override)</th>
+                                                    <th style="width:120px;">Ação</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="fcm-override-targets-body">
+                                                <!-- Preenchido via JS -->
+                                            </tbody>
+                                        </table>
+                                        <input type="hidden" name="cb_targets_json" id="cb_targets_json" value="[]">
+                                    </div>
+                                    <p class="description">Este banner <strong>sobrescreverá</strong> o funil nas URLs listadas acima.</p>
                                 </td>
                             </tr>
                         </table>
@@ -934,17 +977,29 @@ class FunnelCTAManager {
 
                 <!-- TAB: Posts Classificados -->
                 <div id="tab-list" class="tab-content" style="display: <?php echo $active_tab === 'list' ? 'block' : 'none'; ?>;">
-                    <h2 style="font-size: 1.3em; margin-top:0;">Lista de Posts com CTA</h2>
+                    <div style="display:flex; justify-content: space-between; align-items: center;">
+                        <h2 style="font-size: 1.3em; margin:0;">Lista de Posts com CTA</h2>
+                        <div class="fcm-bulk-actions" style="display: flex; gap: 10px;">
+                            <select id="fcm-list-bulk-action">
+                                <option value="">Ações em Massa</option>
+                                <option value="remove">Remover da Lista</option>
+                                <option value="edit">Editar Estágio/Posição</option>
+                            </select>
+                            <button type="button" id="fcm-apply-list-bulk" class="button">Aplicar</button>
+                        </div>
+                    </div>
                     <hr style="margin: 20px 0;">
                     <table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
                         <thead>
                             <tr>
-                                <th style="width: 60%;">Título do Post / URL</th>
+                                <th style="width: 30px;"><input type="checkbox" id="fcm-list-select-all"></th>
+                                <th style="width: 40%;">Título do Post / URL</th>
                                 <th>Estágio do Funil</th>
+                                <th>Posição (Override)</th>
                                 <th>Ação</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="fcm-classified-list-body">
                             <?php
                             $classified_posts = new WP_Query([
                                 'post_type'      => 'post',
@@ -956,9 +1011,16 @@ class FunnelCTAManager {
                             if ($classified_posts->have_posts()) {
                                 while ($classified_posts->have_posts()) {
                                     $classified_posts->the_post();
-                                    $stage = get_post_meta(get_the_ID(), '_fcm_stage', true);
+                                    $pid = get_the_ID();
+                                    $stage = get_post_meta($pid, '_fcm_stage', true);
                                     if(empty($stage)) continue;
                                     
+                                    $pos_override = get_post_meta($pid, '_fcm_position', true);
+                                    $p_count = get_post_meta($pid, '_fcm_paragraph', true);
+                                    
+                                    $pos_label = $pos_override ? $pos_override : 'Global do Estágio';
+                                    if ($pos_override === 'after_p') $pos_label .= ' (' . $p_count . ')';
+
                                     $colors = ['topo' => '#d1ecf1', 'meio' => '#fff3cd', 'fundo' => '#f8d7da'];
                                     $bg = isset($colors[$stage]) ? $colors[$stage] : '#eee';
                                     $stage_label = $stage;
@@ -966,15 +1028,20 @@ class FunnelCTAManager {
                                     if ($stage === 'meio') $stage_label = $label_meio;
                                     if ($stage === 'fundo') $stage_label = $label_fundo;
 
-                                    echo '<tr>';
+                                    echo '<tr data-id="' . $pid . '">';
+                                    echo '<td><input type="checkbox" class="fcm-list-item-checkbox" value="' . $pid . '"></td>';
                                     echo '<td><strong>' . get_the_title() . '</strong><br><small><a href="' . get_permalink() . '" target="_blank">' . get_permalink() . '</a></small></td>';
                                     echo '<td><span style="background:'. $bg .'; padding: 5px 10px; border-radius: 4px; font-weight: bold; text-transform: uppercase; font-size: 10px;">' . esc_html($stage_label) . '</span></td>';
-                                    echo '<td><a href="' . get_edit_post_link() . '" class="button button-small" target="_blank">Editar</a></td>';
+                                    echo '<td><code>' . esc_html($pos_label) . '</code></td>';
+                                    echo '<td>
+                                            <button type="button" class="button button-small fcm-edit-classified" data-id="' . $pid . '" data-stage="' . esc_attr($stage) . '" data-pos="' . esc_attr($pos_override) . '" data-p="' . esc_attr($p_count) . '">Editar</button>
+                                            <button type="button" class="button button-small fcm-remove-classified" data-id="' . $pid . '" style="color:#b32d2e;">Remover</button>
+                                          </td>';
                                     echo '</tr>';
                                 }
                                 wp_reset_postdata();
                             } else {
-                                echo '<tr><td colspan="3">Nenhum post classificado até o momento.</td></tr>';
+                                echo '<tr><td colspan="5">Nenhum post classificado até o momento.</td></tr>';
                             }
                             ?>
                         </tbody>
@@ -989,6 +1056,43 @@ class FunnelCTAManager {
                     <button type="button" id="btn-run-conflict-analysis" class="button button-primary"><span class="dashicons dashicons-chart-pie" style="margin-top:4px;"></span> Analisar Cenário Atual</button>
                     <span class="spinner" id="fcm-analysis-spinner" style="float:none; margin-top:3px;"></span>
                     <div id="fcm-conflict-results" style="margin-top: 20px;"></div>
+                </div>
+            </div>
+
+            <!-- MODAL: Quick Editor (Estágio/Posição) -->
+            <div id="fcm-modal-editor" style="display:none; position:fixed; top:20%; left:50%; transform: translateX(-50%); width:400px; background:#fff; border:1px solid #ccc; z-index:10000; padding:20px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); border-radius: 8px;">
+                <h2 style="margin-top:0;" id="fcm-editor-title">Personalizar Exibição</h2>
+                <input type="hidden" id="fcm-edit-id">
+                <input type="hidden" id="fcm-edit-type"> <!-- 'post' ou 'override-url' -->
+                
+                <div id="fcm-edit-stage-wrapper" style="margin-bottom: 15px;">
+                    <label style="display:block; font-weight:bold; margin-bottom:5px;">Estágio do Funil:</label>
+                    <select id="fcm-edit-stage" style="width:100%;">
+                        <option value="topo"><?php echo $label_topo; ?></option>
+                        <option value="meio"><?php echo $label_meio; ?></option>
+                        <option value="fundo"><?php echo $label_fundo; ?></option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; font-weight:bold; margin-bottom:5px;">Posição (Override):</label>
+                    <select id="fcm-edit-pos" style="width:100%;">
+                        <option value="">Padrão do Estágio</option>
+                        <option value="top">Início</option>
+                        <option value="middle">Meio</option>
+                        <option value="bottom">Fim</option>
+                        <option value="after_p">Após Parágrafo X</option>
+                    </select>
+                </div>
+
+                <div id="fcm-edit-p-wrapper" style="margin-bottom: 15px; display:none;">
+                    <label style="display:block; font-weight:bold; margin-bottom:5px;">Número do Parágrafo:</label>
+                    <input type="number" id="fcm-edit-p" value="3" min="1" style="width:100%;">
+                </div>
+
+                <div style="display:flex; justify-content: flex-end; gap:10px; margin-top:20px;">
+                    <button type="button" class="button" onclick="jQuery('#fcm-modal-editor').hide();">Cancelar</button>
+                    <button type="button" id="fcm-save-post-edit" class="button button-primary">Salvar Alterações</button>
                 </div>
             </div>
         </div>
@@ -1076,6 +1180,212 @@ class FunnelCTAManager {
                 const row = $(this).closest('.fcm-random-entry-row');
                 row.find('.fcm-random-type-area').hide();
                 row.find('.fcm-random-type-' + $(this).val()).show();
+            });
+
+            // ----- LISTA DE BANNERS DE OVERRIDE (TARGETS) ----- //
+            var currentOverrideTargets = [];
+
+            function renderOverrideTargetsTable() {
+                var html = '';
+                if(currentOverrideTargets.length === 0) {
+                    html = '<tr><td colspan="4" style="text-align:center;">Nenhuma URL adicionada.</td></tr>';
+                } else {
+                    currentOverrideTargets.forEach(function(target, index) {
+                        var posLabel = target.pos ? target.pos : 'Padrão do Banner';
+                        if(target.pos === 'after_p') posLabel += ' (' + (target.p || 3) + ')';
+                        
+                        html += '<tr data-index="' + index + '">';
+                        html += '<td><input type="checkbox" class="fcm-override-item-checkbox" value="' + index + '"></td>';
+                        html += '<td>' + target.url + '</td>';
+                        html += '<td><code>' + posLabel + '</code></td>';
+                        html += '<td>';
+                        html += '<button type="button" class="button button-small fcm-edit-override-target" data-index="' + index + '">Editar</button> ';
+                        html += '<button type="button" class="button button-small fcm-remove-override-target" data-index="' + index + '" style="color:red;">&times;</button>';
+                        html += '</td>';
+                        html += '</tr>';
+                    });
+                }
+                $('#fcm-override-targets-body').html(html);
+                $('#cb_targets_json').val(JSON.stringify(currentOverrideTargets));
+                
+                if($('.fcm-override-item-checkbox:checked').length > 0) $('#fcm-override-bulk-actions').show();
+                else $('#fcm-override-bulk-actions').hide();
+            }
+
+            $(document).on('click', '#fcm-add-target-btn', function(){
+                var url = $('#fcm-new-target-url').val().trim();
+                if(!url) return;
+                currentOverrideTargets.push({ url: url, pos: '', p: 3 });
+                $('#fcm-new-target-url').val('');
+                renderOverrideTargetsTable();
+            });
+
+            $(document).on('click', '#fcm-add-bulk-targets-btn', function(){
+                var text = $('#fcm-bulk-targets-text').val().trim();
+                if(!text) return;
+                var urls = text.split(/[\n,]+/).map(u => u.trim()).filter(u => u !== '');
+                urls.forEach(u => currentOverrideTargets.push({ url: u, pos: '', p: 3 }));
+                $('#fcm-bulk-targets-text').val('');
+                renderOverrideTargetsTable();
+            });
+
+            $(document).on('click', '#fcm-import-override-csv-btn', function(){
+                var file = $('#fcm-override-csv').prop('files')[0];
+                if(!file) return alert('Selecione um CSV.');
+                var reader = new FileReader();
+                reader.onload = function(e){
+                    var lines = e.target.result.split('\n');
+                    lines.forEach(line => {
+                        var u = line.split(',')[0].trim();
+                        if(u) currentOverrideTargets.push({ url: u, pos: '', p: 3 });
+                    });
+                    renderOverrideTargetsTable();
+                };
+                reader.readAsText(file);
+            });
+
+            $(document).on('click', '.fcm-remove-override-target', function(){
+                var index = $(this).data('index');
+                currentOverrideTargets.splice(index, 1);
+                renderOverrideTargetsTable();
+            });
+
+            $('#fcm-override-select-all').change(function(){
+                $('.fcm-override-item-checkbox').prop('checked', $(this).is(':checked'));
+                renderOverrideTargetsTable();
+            });
+
+            $(document).on('change', '.fcm-override-item-checkbox', function(){
+                renderOverrideTargetsTable();
+            });
+
+            $('#fcm-override-bulk-remove').click(function(){
+                var selected = [];
+                $('.fcm-override-item-checkbox:checked').each(function(){ selected.push(parseInt($(this).val())); });
+                if(selected.length === 0) return;
+                if(!confirm('Remover ' + selected.length + ' URLs?')) return;
+                currentOverrideTargets = currentOverrideTargets.filter((_, i) => !selected.includes(i));
+                renderOverrideTargetsTable();
+            });
+
+            $(document).on('click', '.fcm-edit-override-target', function(){
+                var index = $(this).data('index');
+                var target = currentOverrideTargets[index];
+
+                $('#fcm-editor-title').text('Personalizar URL: ' + target.url);
+                $('#fcm-edit-id').val(index);
+                $('#fcm-edit-type').val('override-url');
+                $('#fcm-edit-stage-wrapper').hide(); // Estágio não se aplica a Override Banner
+                $('#fcm-edit-pos').val(target.pos || '').trigger('change');
+                $('#fcm-edit-p').val(target.p || 3);
+                $('#fcm-modal-editor').show();
+                
+                // Reiniciar clique do salvar
+                $('#fcm-save-post-edit').off('click').on('click', function(){
+                    currentOverrideTargets[index].pos = $('#fcm-edit-pos').val();
+                    currentOverrideTargets[index].p = $('#fcm-edit-p').val();
+                    $('#fcm-modal-editor').hide();
+                    renderOverrideTargetsTable();
+                });
+            });
+
+            $('#fcm-override-bulk-edit').click(function(){
+                var selected = [];
+                $('.fcm-override-item-checkbox:checked').each(function(){ selected.push(parseInt($(this).val())); });
+                if(selected.length === 0) return;
+
+                $('#fcm-editor-title').text('Editar ' + selected.length + ' URLs');
+                $('#fcm-edit-type').val('override-url-bulk');
+                $('#fcm-edit-stage-wrapper').hide();
+                $('#fcm-edit-pos').val('').trigger('change');
+                $('#fcm-modal-editor').show();
+
+                $('#fcm-save-post-edit').off('click').on('click', function(){
+                    selected.forEach(index => {
+                        currentOverrideTargets[index].pos = $('#fcm-edit-pos').val();
+                        currentOverrideTargets[index].p = $('#fcm-edit-p').val();
+                    });
+                    $('#fcm-modal-editor').hide();
+                    renderOverrideTargetsTable();
+                });
+            });
+
+            // ----- LISTA DE POSTS CLASSIFICADOS ----- //
+            $('#fcm-list-select-all').change(function(){
+                $('.fcm-list-item-checkbox').prop('checked', $(this).is(':checked'));
+            });
+
+            $(document).on('click', '.fcm-remove-classified', function(){
+                var id = $(this).data('id');
+                if(!confirm('Deseja remover esta classificação?')) return;
+                $.post(ajaxurl, {action: 'fcm_remove_classified', post_id: id}, function(){
+                    $('tr[data-id="'+id+'"]').fadeOut();
+                });
+            });
+
+            $(document).on('click', '.fcm-edit-classified', function(){
+                var id = $(this).data('id');
+                var stage = $(this).data('stage');
+                var pos = $(this).data('pos');
+                var p = $(this).data('p');
+
+                $('#fcm-edit-post-id').val(id);
+                $('#fcm-edit-stage').val(stage);
+                $('#fcm-edit-pos').val(pos || '').trigger('change');
+                $('#fcm-edit-p').val(p || 3);
+                $('#fcm-modal-editor').show();
+            });
+
+            $('#fcm-edit-pos').change(function(){
+                if($(this).val() === 'after_p') $('#fcm-edit-p-wrapper').show();
+                else $('#fcm-edit-p-wrapper').hide();
+            });
+
+            $('#fcm-save-post-edit').click(function(){
+                var id = $('#fcm-edit-post-id').val();
+                var data = {
+                    action: 'fcm_save_post_edit',
+                    post_id: id,
+                    stage: $('#fcm-edit-stage').val(),
+                    pos: $('#fcm-edit-pos').val(),
+                    p: $('#fcm-edit-p').val()
+                };
+                $.post(ajaxurl, data, function(){
+                    location.reload();
+                });
+            });
+
+            $('#fcm-apply-list-bulk').click(function(){
+                var ids = [];
+                $('.fcm-list-item-checkbox:checked').each(function(){ ids.push($(this).val()); });
+                if(ids.length === 0) return alert('Selecione ao menos um post.');
+
+                var action = $('#fcm-list-bulk-action').val();
+                if(!action) return alert('Selecione uma ação.');
+
+                if(action === 'remove') {
+                    if(!confirm('Remover classificação de ' + ids.length + ' posts?')) return;
+                    $.post(ajaxurl, {action: 'fcm_bulk_action_classified', bulk_action: 'remove', post_ids: ids}, function(){
+                        location.reload();
+                    });
+                } else if(action === 'edit') {
+                    $('#fcm-edit-post-id').val('bulk');
+                    $('#fcm-modal-editor').show();
+                    // Modificar o comportamento do botão salvar para bulk
+                    $('#fcm-save-post-edit').off('click').on('click', function(){
+                        var bulkData = {
+                            action: 'fcm_bulk_action_classified',
+                            bulk_action: 'edit',
+                            post_ids: ids,
+                            stage: $('#fcm-edit-stage').val(),
+                            pos: $('#fcm-edit-pos').val(),
+                            p: $('#fcm-edit-p').val()
+                        };
+                        $.post(ajaxurl, bulkData, function(){
+                            location.reload();
+                        });
+                    });
+                }
             });
 
             var mainFormTabs = ['#tab-dashboard', '#tab-topo', '#tab-meio', '#tab-fundo', '#tab-padrao', '#tab-advanced'];
@@ -1173,6 +1483,9 @@ class FunnelCTAManager {
                 $('#cb_name').val('');
                 $('#cb_status').val('active');
                 
+                currentOverrideTargets = [];
+                renderOverrideTargetsTable();
+
                 $('#cb-random-desktop-container').html('<div class="fcm-random-container" data-key="cb" data-device="desktop"><div class="fcm-random-entries-list"></div><button type="button" class="button button-secondary fcm-add-random-entry" style="margin-top:10px;">+ Adicionar Entrada (Desktop)</button></div>');
                 $('#cb-random-mobile-container').html('<div class="fcm-random-container" data-key="cb" data-device="mobile"><div class="fcm-random-entries-list"></div><button type="button" class="button button-secondary fcm-add-random-entry" style="margin-top:10px;">+ Adicionar Entrada (Mobile)</button></div>');
 
@@ -1180,7 +1493,6 @@ class FunnelCTAManager {
                 $('#cb_allow_multiple').prop('checked', false);
                 $('#cb_start').val('');
                 $('#cb_end').val('');
-                $('#cb_targets').val('');
                 $('#cb_position').val('middle').trigger('change');
                 $('#cb_paragraph').val('3');
 
@@ -1196,6 +1508,22 @@ class FunnelCTAManager {
                 $('.cb_dynamic_id').text(data.id);
                 $('#cb_name').val(data.name);
                 $('#cb_status').val(data.status);
+
+                // Migração e População de Targets
+                currentOverrideTargets = [];
+                if(data.targets) {
+                    if(Array.isArray(data.targets)) {
+                        currentOverrideTargets = data.targets;
+                    } else if(typeof data.targets === 'string') {
+                        // Migrar do formato antigo (uma por linha)
+                        var lines = data.targets.split('\n');
+                        lines.forEach(function(l){
+                            var u = l.trim();
+                            if(u) currentOverrideTargets.push({ url: u, pos: '', p: 3 });
+                        });
+                    }
+                }
+                renderOverrideTargetsTable();
                 
                 var desktopData = data.desktop_data || [];
                 if(desktopData.length === 0 && data.image) {
@@ -1404,6 +1732,60 @@ class FunnelCTAManager {
         <?php
     }
 
+    public function handle_remove_classified() {
+        if (!current_user_can('manage_options')) wp_die();
+        $pid = intval($_POST['post_id']);
+        delete_post_meta($pid, '_fcm_stage');
+        delete_post_meta($pid, '_fcm_position');
+        delete_post_meta($pid, '_fcm_paragraph');
+        wp_send_json_success();
+    }
+
+    public function handle_bulk_action_classified() {
+        if (!current_user_can('manage_options')) wp_die();
+        $pids = array_map('intval', (array)$_POST['post_ids']);
+        $action = sanitize_text_field($_POST['bulk_action']);
+        
+        foreach ($pids as $pid) {
+            if ($action === 'remove') {
+                delete_post_meta($pid, '_fcm_stage');
+                delete_post_meta($pid, '_fcm_position');
+                delete_post_meta($pid, '_fcm_paragraph');
+            } elseif ($action === 'edit') {
+                $stage = sanitize_text_field($_POST['stage']);
+                $pos = sanitize_text_field($_POST['pos']);
+                $p = intval($_POST['p']);
+                update_post_meta($pid, '_fcm_stage', $stage);
+                if ($pos) {
+                    update_post_meta($pid, '_fcm_position', $pos);
+                    update_post_meta($pid, '_fcm_paragraph', $p);
+                } else {
+                    delete_post_meta($pid, '_fcm_position');
+                    delete_post_meta($pid, '_fcm_paragraph');
+                }
+            }
+        }
+        wp_send_json_success();
+    }
+
+    public function handle_save_post_edit() {
+        if (!current_user_can('manage_options')) wp_die();
+        $pid = intval($_POST['post_id']);
+        $stage = sanitize_text_field($_POST['stage']);
+        $pos = sanitize_text_field($_POST['pos']);
+        $p = intval($_POST['p']);
+
+        update_post_meta($pid, '_fcm_stage', $stage);
+        if ($pos) {
+            update_post_meta($pid, '_fcm_position', $pos);
+            update_post_meta($pid, '_fcm_paragraph', $p);
+        } else {
+            delete_post_meta($pid, '_fcm_position');
+            delete_post_meta($pid, '_fcm_paragraph');
+        }
+        wp_send_json_success();
+    }
+
     public function handle_post_search() {
         if (!current_user_can('manage_options')) wp_die();
         $term = sanitize_text_field($_POST['term']);
@@ -1557,20 +1939,37 @@ class FunnelCTAManager {
                 if ($end && $now > $end) continue;
             }
 
-            $targets = array_map('trim', explode("\n", $cb['targets'] ?? ''));
+            $targets = $cb['targets'] ?? [];
             $matched = false;
-            foreach ($targets as $t) {
-                if (empty($t)) continue;
-                if (strpos($current_url, $t) !== false || $t == $post_id) {
-                    $matched = true; break;
+            $pos_override = null;
+            $p_override = null;
+
+            if (is_array($targets)) {
+                foreach ($targets as $t) {
+                    if (empty($t['url'])) continue;
+                    if (strpos($current_url, $t['url']) !== false || $t['url'] == $post_id) {
+                        $matched = true;
+                        $pos_override = !empty($t['pos']) ? $t['pos'] : null;
+                        $p_override = !empty($t['p']) ? intval($t['p']) : null;
+                        break;
+                    }
+                }
+            } else {
+                // Fallback para o formato antigo de string (uma por linha)
+                $old_targets = array_map('trim', explode("\n", $targets));
+                foreach ($old_targets as $t) {
+                    if (empty($t)) continue;
+                    if (strpos($current_url, $t) !== false || $t == $post_id) {
+                        $matched = true; break;
+                    }
                 }
             }
             
             if ($matched) {
                 $html = $this->generate_custom_banner_html($cb);
                 if ($html) {
-                    $pos = isset($cb['position']) && $cb['position'] ? $cb['position'] : 'middle';
-                    $pCount = isset($cb['paragraph']) ? (int)$cb['paragraph'] : 3;
+                    $pos = $pos_override ?: (isset($cb['position']) && $cb['position'] ? $cb['position'] : 'middle');
+                    $pCount = $p_override ?: (isset($cb['paragraph']) ? (int)$cb['paragraph'] : 3);
                     $final_banners[] = ['html' => $html, 'pos' => $pos, 'pCount' => $pCount, 'source' => 'override'];
                     
                     if (empty($cb['allow_multiple'])) {
@@ -1603,8 +2002,12 @@ class FunnelCTAManager {
             if ($stage_to_use) {
                 $html = $this->generate_banner_html_from_options($options, $stage_to_use);
                 if ($html) {
-                    $pos = isset($options[$stage_to_use . '_position']) && $options[$stage_to_use . '_position'] ? $options[$stage_to_use . '_position'] : 'middle';
-                    $pCount = isset($options[$stage_to_use . '_paragraph']) ? (int)$options[$stage_to_use . '_paragraph'] : 3;
+                    $pos_override = get_post_meta($post_id, '_fcm_position', true);
+                    $p_override = get_post_meta($post_id, '_fcm_paragraph', true);
+                    
+                    $pos = $pos_override ?: (isset($options[$stage_to_use . '_position']) ? $options[$stage_to_use . '_position'] : 'middle');
+                    $pCount = $p_override ?: (isset($options[$stage_to_use . '_paragraph']) ? (int)$options[$stage_to_use . '_paragraph'] : 3);
+                    
                     $final_banners[] = ['html' => $html, 'pos' => $pos, 'pCount' => $pCount, 'source' => 'stage'];
                     $has_stage_banner = true;
                 }
