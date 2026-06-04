@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Junior's Banner Manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 3.3
+ * Version: 3.4
  * Author: junior
  * Text Domain: funnel-cta
  */
