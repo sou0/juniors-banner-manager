@@ -2160,6 +2160,8 @@ class FunnelCTAManager {
                 var items = deviceContainer.querySelectorAll('.fcm-random-item');
                 if (items.length === 0) return;
 
+                deviceContainer.style.display = 'block';
+
                 var randomItem = items[Math.floor(Math.random() * items.length)];
                 randomItem.style.display = 'block';
                 randomItem.style.margin = '40px 0';
@@ -2283,6 +2285,25 @@ class FunnelCTAManager {
         ?>
         <script>
         document.addEventListener("DOMContentLoaded", function() {
+            // Inicializar banners nativos (ex: via shortcode)
+            var isMobile = window.innerWidth <= 768;
+            var standaloneWrappers = document.querySelectorAll('.fcm-banner-wrapper');
+            standaloneWrappers.forEach(function(wrapper) {
+                var deviceContainer = isMobile ? wrapper.querySelector('.fcm-mobile-container') : wrapper.querySelector('.fcm-desktop-container');
+                if (!deviceContainer) return;
+                var items = deviceContainer.querySelectorAll('.fcm-random-item');
+                if (items.length === 0) return;
+                
+                deviceContainer.style.display = 'block';
+                var hasVisible = Array.prototype.slice.call(items).some(function(item) { return item.style.display !== 'none'; });
+                if (!hasVisible) {
+                    var randomItem = items[Math.floor(Math.random() * items.length)];
+                    randomItem.style.display = 'block';
+                    randomItem.style.margin = '40px 0';
+                    randomItem.style.textAlign = 'center';
+                }
+            });
+
             var els = document.querySelectorAll('.fcm-countdown-el');
             if (els.length === 0) return;
 
@@ -2362,4 +2383,4 @@ class FunnelCTAManager {
 }
 
 new FunnelCTAManager();
-add_action('admin_init', function(){ register_setting('fcm_settings_group', 'fcm_settings'); });
+add_action('admin_init', function(){ register_setting('fcm_settings_group', 'fcm_settings'); });tings'); });s_group', 'fcm_settings'); });
