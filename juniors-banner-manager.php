@@ -568,8 +568,22 @@ class FunnelCTAManager {
                     <h2 style="font-size: 1.3em; margin-top:0;">Configurações Avançadas</h2>
                     <p class="description">Opções avançadas para desenvolvedores e ajustes finos do motor de injeção.</p>
                     <hr style="margin: 20px 0;">
-                    
-                    <table class="form-table">
+
+                    <h3 style="margin-top: 30px;">Logs de Diagnóstico (Frontend)</h3>
+                    <p class="description">Estes logs ajudam a identificar por que um banner não está aparecendo. Atualize uma página do site para gerar novos logs.</p>
+                    <div style="background: #f1f1f1; padding: 10px; border: 1px solid #ccc; height: 300px; overflow-y: scroll; font-family: monospace; font-size: 12px; margin-bottom: 10px;">
+                        <?php 
+                        $logs = get_option('fcm_debug_logs', []);
+                        if (!empty($logs)) {
+                            echo implode('<br>', array_map('esc_html', $logs));
+                        } else {
+                            echo 'Nenhum log registrado ainda. Acesse um post no site para gerar logs.';
+                        }
+                        ?>
+                    </div>
+                    <a href="<?php echo admin_url('admin.php?page=funnel-cta&tab=advanced&fcm_clear_logs=1'); ?>" class="button button-secondary">Limpar Logs</a>
+
+                    <table class="form-table" style="margin-top: 30px;">
                         <tr>
                             <th scope="row"><label>Nomes dos Estágios no Editor</label></th>
                             <td>
@@ -1966,6 +1980,14 @@ class FunnelCTAManager {
         return $this->render_random_box_html($desktop_data, $mobile_data);
     }
 
+    public function fcm_log($message) {
+        $logs = get_option('fcm_debug_logs', []);
+        if (!is_array($logs)) $logs = [];
+        $logs[] = '[' . current_time('mysql') . '] ' . $message;
+        if (count($logs) > 50) $logs = array_slice($logs, -50);
+        update_option('fcm_debug_logs', $logs, false);
+    }
+
     public function inject_cta_via_js() {
         if (!is_single()) return;
 
@@ -2098,11 +2120,11 @@ class FunnelCTAManager {
         }
 
         if (empty($final_banners)) {
-            error_log("FCM_DEBUG: final_banners is empty. Returning.");
+            $this->fcm_log("FCM_DEBUG: final_banners is empty. Returning.");
             return;
         }
 
-        error_log("FCM_DEBUG: final_banners count: " . count($final_banners));
+        $this->fcm_log("FCM_DEBUG: final_banners count: " . count($final_banners));
 
         $custom_selectors_str = isset($options['custom_selectors']) ? $options['custom_selectors'] : '';
         $custom_selectors = [];
