@@ -1973,10 +1973,13 @@ class FunnelCTAManager {
         $current_url = get_permalink($post_id);
         $options = get_option($this->option_name);
         
+        error_log("FCM_DEBUG: inject_cta_via_js called for Post ID $post_id ($current_url)");
+
         $final_banners = [];
         $override_blocks_others = false;
 
         $custom_banners = get_option($this->custom_banners_option, []);
+        error_log("FCM_DEBUG: custom_banners count: " . count($custom_banners));
         foreach ($custom_banners as $cb) {
             if ($cb['status'] !== 'active') continue;
             
@@ -2015,6 +2018,7 @@ class FunnelCTAManager {
             }
             
             if ($matched) {
+                error_log("FCM_DEBUG: Custom banner matched.");
                 $html = $this->generate_custom_banner_html($cb);
                 if ($html) {
                     $pos = $pos_override ?: (isset($cb['position']) && $cb['position'] ? $cb['position'] : 'middle');
@@ -2024,6 +2028,8 @@ class FunnelCTAManager {
                     if (empty($cb['allow_multiple'])) {
                         $override_blocks_others = true;
                     }
+                } else {
+                    error_log("FCM_DEBUG: Custom banner HTML generated was empty.");
                 }
                 break;
             }
@@ -2034,6 +2040,7 @@ class FunnelCTAManager {
         if (!$override_blocks_others) {
             $stage = get_post_meta($post_id, '_fcm_stage', true);
             $stage_to_use = null;
+            error_log("FCM_DEBUG: Post stage: " . print_r($stage, true));
 
             if ($stage && in_array($stage, ['topo', 'meio', 'fundo'])) {
                 if ($this->is_banner_active($options, $stage)) {
@@ -2090,7 +2097,12 @@ class FunnelCTAManager {
             }
         }
 
-        if (empty($final_banners)) return;
+        if (empty($final_banners)) {
+            error_log("FCM_DEBUG: final_banners is empty. Returning.");
+            return;
+        }
+
+        error_log("FCM_DEBUG: final_banners count: " . count($final_banners));
 
         $custom_selectors_str = isset($options['custom_selectors']) ? $options['custom_selectors'] : '';
         $custom_selectors = [];
@@ -2108,6 +2120,8 @@ class FunnelCTAManager {
             var banners = <?php echo wp_json_encode($final_banners); ?>;
             var isMobile = window.innerWidth <= 768;
             
+            console.log("FCM_DEBUG: Banners to inject:", banners);
+
             var customSelectors = <?php echo wp_json_encode($custom_selectors); ?>;
             var selectors = [
                 '#conteudo-postagem',
