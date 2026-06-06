@@ -416,7 +416,7 @@ class FunnelCTAManager {
                                                 </div>
                                             </div>
 
-                                            <div class="fcm-html-wrapper-desktop-<?php echo esc_attr($key); ?>\" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
+                                            <div class="fcm-html-wrapper-desktop-<?php echo esc_attr($key); ?>" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
                                                 <textarea name="fcm_settings[<?php echo esc_attr($key . '_html'); ?>]" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."><?php echo esc_textarea($html_content); ?></textarea>
                                             </div>
                                         </div>
@@ -443,7 +443,7 @@ class FunnelCTAManager {
                                                 </div>
                                             </div>
 
-                                            <div class="fcm-html-wrapper-mobile-<?php echo esc_attr($key); ?>\" style="display: <?php echo $type_mobile === 'html' ? 'block' : 'none'; ?>;">
+                                            <div class="fcm-html-wrapper-mobile-<?php echo esc_attr($key); ?>" style="display: <?php echo $type_mobile === 'html' ? 'block' : 'none'; ?>;">
                                                 <textarea name="fcm_settings[<?php echo esc_attr($key . '_html_mobile'); ?>]" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."><?php echo esc_textarea($html_mobile_content); ?></textarea>
                                             </div>
                                         </div>
