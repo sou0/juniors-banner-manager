@@ -680,7 +680,7 @@ class FunnelCTAManager {
                                                 </div>
                                             </div>
 
-                                            <div id="cb_html_desktop_wrapper\" style="display:none;">
+                                            <div id="cb_html_desktop_wrapper" style="display:none;">
                                                 <textarea name="cb_html" id="cb_html" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
@@ -706,7 +706,7 @@ class FunnelCTAManager {
                                                 </div>
                                             </div>
 
-                                            <div id="cb_html_mobile_wrapper\" style="display:none;">
+                                            <div id="cb_html_mobile_wrapper" style="display:none;">
                                                 <textarea name="cb_html_mobile" id="cb_html_mobile" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
@@ -891,7 +891,7 @@ class FunnelCTAManager {
                                                 </div>
                                             </div>
 
-                                            <div id="scb_html_desktop_wrapper\" style="display:none;">
+                                            <div id="scb_html_desktop_wrapper" style="display:none;">
                                                 <textarea name="scb_html" id="scb_html" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
@@ -917,7 +917,7 @@ class FunnelCTAManager {
                                                 </div>
                                             </div>
 
-                                            <div id="scb_html_mobile_wrapper\" style="display:none;">
+                                            <div id="scb_html_mobile_wrapper" style="display:none;">
                                                 <textarea name="scb_html_mobile" id="scb_html_mobile" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
