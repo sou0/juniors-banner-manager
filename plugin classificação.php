@@ -388,22 +388,25 @@ class FunnelCTAManager {
 
                         <table class="form-table">
                                                         <tr>
-                                <th scope="row"><label><strong>Tipo de Banner (Desktop)</strong></label></th>
+                                <th scope="row"><label><strong>Tipo de Banner</strong></label></th>
                                 <td>
-                                    <select name="fcm_settings[<?php echo esc_attr($key . '_type'); ?>]" class="fcm-main-type-select-desktop" data-key="<?php echo esc_attr($key); ?>" style="min-width: 250px;">
-                                        <option value="image" <?php selected($type, 'image'); ?>>Apenas Imagem (Padrão)</option>
-                                        <option value="html" <?php selected($type, 'html'); ?>>Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
-                                </td>
-                            </tr>
-                            <tr>
-                                <th scope="row"><label><strong>Tipo de Banner (Mobile)</strong></label></th>
-                                <td>
-                                    <?php $type_mobile = isset($options[$key . '_type_mobile']) ? $options[$key . '_type_mobile'] : $type; ?>
-                                    <select name="fcm_settings[<?php echo esc_attr($key . '_type_mobile'); ?>]" class="fcm-main-type-select-mobile" data-key="<?php echo esc_attr($key); ?>" style="min-width: 250px;">
-                                        <option value="image" <?php selected($type_mobile, 'image'); ?>>Apenas Imagem (Padrão)</option>
-                                        <option value="html" <?php selected($type_mobile, 'html'); ?>>Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
+                                    <div style="display:flex; gap: 20px;">
+                                        <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
+                                            <select name="fcm_settings[<?php echo esc_attr($key . '_type'); ?>]" class="fcm-main-type-select-desktop" data-key="<?php echo esc_attr($key); ?>" style="width: 100%;">
+                                                <option value="image" <?php selected($type, 'image'); ?>>Apenas Imagem (Padrão)</option>
+                                                <option value="html" <?php selected($type, 'html'); ?>>Shortcode Elementor / HTML Personalizado</option>
+                                            </select>
+                                        </div>
+                                        <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile</h4>
+                                            <?php $type_mobile = isset($options[$key . '_type_mobile']) ? $options[$key . '_type_mobile'] : $type; ?>
+                                            <select name="fcm_settings[<?php echo esc_attr($key . '_type_mobile'); ?>]" class="fcm-main-type-select-mobile" data-key="<?php echo esc_attr($key); ?>" style="width: 100%;">
+                                                <option value="image" <?php selected($type_mobile, 'image'); ?>>Apenas Imagem (Padrão)</option>
+                                                <option value="html" <?php selected($type_mobile, 'html'); ?>>Shortcode Elementor / HTML Personalizado</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             <tr class="fcm-main-type-area fcm-main-type-image-<?php echo esc_attr($key); ?>" style="display: table-row;">
@@ -434,14 +437,16 @@ class FunnelCTAManager {
                             <tr class="fcm-main-type-area fcm-main-type-html-<?php echo esc_attr($key); ?>" style="display: <?php echo ($type === 'html' || $type_mobile === 'html') ? 'table-row' : 'none'; ?>;">
                                 <th scope="row"><label><strong>Conteúdo HTML / Shortcode</strong></label></th>
                                 <td>
-                                    <?php $html_mobile_content = isset($options[$key . '_html_mobile']) ? $options[$key . '_html_mobile'] : ''; ?>
-                                    <div class="fcm-html-wrapper-desktop-<?php echo esc_attr($key); ?>" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>; margin-bottom: 10px;">
-                                        <h4 style="margin-top:0; margin-bottom:5px;">Desktop</h4>
-                                        <textarea name="fcm_settings[<?php echo esc_attr($key . '_html'); ?>]" rows="4" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."><?php echo esc_textarea($html_content); ?></textarea>
-                                    </div>
-                                    <div class="fcm-html-wrapper-mobile-<?php echo esc_attr($key); ?>" style="display: <?php echo $type_mobile === 'html' ? 'block' : 'none'; ?>;">
-                                        <h4 style="margin-top:0; margin-bottom:5px;">Mobile</h4>
-                                        <textarea name="fcm_settings[<?php echo esc_attr($key . '_html_mobile'); ?>]" rows="4" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML para mobile..."><?php echo esc_textarea($html_mobile_content); ?></textarea>
+                                    <div style="display:flex; gap: 20px;">
+                                        <?php $html_mobile_content = isset($options[$key . '_html_mobile']) ? $options[$key . '_html_mobile'] : ''; ?>
+                                        <div class="fcm-html-wrapper-desktop-<?php echo esc_attr($key); ?>" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1; display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
+                                            <textarea name="fcm_settings[<?php echo esc_attr($key . '_html'); ?>]" rows="4" class="large-text code" style="width: 100%;" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."><?php echo esc_textarea($html_content); ?></textarea>
+                                        </div>
+                                        <div class="fcm-html-wrapper-mobile-<?php echo esc_attr($key); ?>" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1; display: <?php echo $type_mobile === 'html' ? 'block' : 'none'; ?>;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile</h4>
+                                            <textarea name="fcm_settings[<?php echo esc_attr($key . '_html_mobile'); ?>]" rows="4" class="large-text code" style="width: 100%;" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML para mobile..."><?php echo esc_textarea($html_mobile_content); ?></textarea>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
@@ -648,22 +653,25 @@ class FunnelCTAManager {
                                     </select>
                                 </td>
                             </tr>
-                                                        <tr>
-                                <th scope="row"><label>Tipo de Banner (Desktop)</label></th>
-                                <td>
-                                    <select name="cb_type" id="cb_type">
-                                        <option value="image">Apenas Imagem (Padrão)</option>
-                                        <option value="html">Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
-                                </td>
-                            </tr>
                             <tr>
-                                <th scope="row"><label>Tipo de Banner (Mobile)</label></th>
+                                <th scope="row"><label>Tipo de Banner</label></th>
                                 <td>
-                                    <select name="cb_type_mobile" id="cb_type_mobile">
-                                        <option value="image">Apenas Imagem (Padrão)</option>
-                                        <option value="html">Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
+                                    <div style="display:flex; gap: 20px;">
+                                        <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
+                                            <select name="cb_type" id="cb_type" style="width: 100%;">
+                                                <option value="image">Apenas Imagem (Padrão)</option>
+                                                <option value="html">Shortcode Elementor / HTML Personalizado</option>
+                                            </select>
+                                        </div>
+                                        <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile</h4>
+                                            <select name="cb_type_mobile" id="cb_type_mobile" style="width: 100%;">
+                                                <option value="image">Apenas Imagem (Padrão)</option>
+                                                <option value="html">Shortcode Elementor / HTML Personalizado</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             
@@ -696,13 +704,15 @@ class FunnelCTAManager {
                             <tr class="cb-type-area cb-type-html" style="display:none;">
                                 <th scope="row"><label>Conteúdo HTML / Shortcode</label></th>
                                 <td>
-                                    <div id="cb_html_desktop_wrapper" style="margin-bottom:10px;">
-                                        <h4 style="margin-top:0; margin-bottom:5px;">Desktop</h4>
-                                        <textarea name="cb_html" id="cb_html" rows="4" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."></textarea>
-                                    </div>
-                                    <div id="cb_html_mobile_wrapper">
-                                        <h4 style="margin-top:0; margin-bottom:5px;">Mobile</h4>
-                                        <textarea name="cb_html_mobile" id="cb_html_mobile" rows="4" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML para mobile..."></textarea>
+                                    <div style="display:flex; gap: 20px;">
+                                        <div id="cb_html_desktop_wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
+                                            <textarea name="cb_html" id="cb_html" rows="4" class="large-text code" style="width: 100%;" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."></textarea>
+                                        </div>
+                                        <div id="cb_html_mobile_wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile</h4>
+                                            <textarea name="cb_html_mobile" id="cb_html_mobile" rows="4" class="large-text code" style="width: 100%;" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML para mobile..."></textarea>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
@@ -857,22 +867,25 @@ class FunnelCTAManager {
                                     </select>
                                 </td>
                             </tr>
-                                                        <tr>
-                                <th scope="row"><label>Tipo de Banner (Desktop)</label></th>
-                                <td>
-                                    <select name="scb_type" id="scb_type">
-                                        <option value="image">Apenas Imagem (Padrão)</option>
-                                        <option value="html">Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
-                                </td>
-                            </tr>
                             <tr>
-                                <th scope="row"><label>Tipo de Banner (Mobile)</label></th>
+                                <th scope="row"><label>Tipo de Banner</label></th>
                                 <td>
-                                    <select name="scb_type_mobile" id="scb_type_mobile">
-                                        <option value="image">Apenas Imagem (Padrão)</option>
-                                        <option value="html">Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
+                                    <div style="display:flex; gap: 20px;">
+                                        <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
+                                            <select name="scb_type" id="scb_type" style="width: 100%;">
+                                                <option value="image">Apenas Imagem (Padrão)</option>
+                                                <option value="html">Shortcode Elementor / HTML Personalizado</option>
+                                            </select>
+                                        </div>
+                                        <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile</h4>
+                                            <select name="scb_type_mobile" id="scb_type_mobile" style="width: 100%;">
+                                                <option value="image">Apenas Imagem (Padrão)</option>
+                                                <option value="html">Shortcode Elementor / HTML Personalizado</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             
@@ -905,13 +918,15 @@ class FunnelCTAManager {
                             <tr class="scb-type-area scb-type-html" style="display:none;">
                                 <th scope="row"><label>Conteúdo HTML / Shortcode</label></th>
                                 <td>
-                                    <div id="scb_html_desktop_wrapper" style="margin-bottom:10px;">
-                                        <h4 style="margin-top:0; margin-bottom:5px;">Desktop</h4>
-                                        <textarea name="scb_html" id="scb_html" rows="4" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."></textarea>
-                                    </div>
-                                    <div id="scb_html_mobile_wrapper">
-                                        <h4 style="margin-top:0; margin-bottom:5px;">Mobile</h4>
-                                        <textarea name="scb_html_mobile" id="scb_html_mobile" rows="4" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML para mobile..."></textarea>
+                                    <div style="display:flex; gap: 20px;">
+                                        <div id="scb_html_desktop_wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
+                                            <textarea name="scb_html" id="scb_html" rows="4" class="large-text code" style="width: 100%;" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."></textarea>
+                                        </div>
+                                        <div id="scb_html_mobile_wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
+                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile</h4>
+                                            <textarea name="scb_html_mobile" id="scb_html_mobile" rows="4" class="large-text code" style="width: 100%;" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML para mobile..."></textarea>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
