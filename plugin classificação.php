@@ -1277,9 +1277,31 @@ class FunnelCTAManager {
             });
 
             // ----- BANNERS SHORTCODE LOGIC ----- //
-            $('#scb_type').change(function(){
-                $('.scb-type-area').hide();
-                $('.scb-type-' + $(this).val()).show();
+            $('#scb_type, #scb_type_mobile').change(function(){
+                var dType = $('#scb_type').val();
+                var mType = $('#scb_type_mobile').val();
+                
+                if (dType === 'image') {
+                    $('#scb_upload_desktop').show();
+                    $('#scb_html_desktop_wrapper').hide();
+                } else {
+                    $('#scb_upload_desktop').hide();
+                    $('#scb_html_desktop_wrapper').show();
+                }
+
+                if (mType === 'image') {
+                    $('#scb_upload_mobile').show();
+                    $('#scb_html_mobile_wrapper').hide();
+                } else {
+                    $('#scb_upload_mobile').hide();
+                    $('#scb_html_mobile_wrapper').show();
+                }
+                
+                if (dType === 'html' || mType === 'html') {
+                    $('.scb-type-html').show();
+                } else {
+                    $('.scb-type-html').hide();
+                }
             });
 
             $('#btn-create-shortcode-banner').click(function(e){
