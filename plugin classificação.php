@@ -149,6 +149,7 @@ class FunnelCTAManager {
                 'image' => sanitize_text_field($_POST['cb_image']),
                 'image_mobile' => isset($_POST['cb_image_mobile']) ? sanitize_text_field($_POST['cb_image_mobile']) : '',
                 'url' => sanitize_text_field($_POST['cb_url']),
+                'url_mobile' => isset($_POST['cb_url_mobile']) ? sanitize_text_field($_POST['cb_url_mobile']) : '',
                 'html' => wp_unslash($_POST['cb_html']),
                 'html_mobile' => isset($_POST['cb_html_mobile']) ? wp_unslash($_POST['cb_html_mobile']) : '', 
                 'schedule' => isset($_POST['cb_schedule']) ? 1 : 0,
@@ -193,6 +194,7 @@ class FunnelCTAManager {
                 'image' => sanitize_text_field($_POST['scb_image']),
                 'image_mobile' => isset($_POST['scb_image_mobile']) ? sanitize_text_field($_POST['scb_image_mobile']) : '',
                 'url' => sanitize_text_field($_POST['scb_url']),
+                'url_mobile' => isset($_POST['scb_url_mobile']) ? sanitize_text_field($_POST['scb_url_mobile']) : '',
                 'html' => wp_unslash($_POST['scb_html']),
                 'html_mobile' => isset($_POST['scb_html_mobile']) ? wp_unslash($_POST['scb_html_mobile']) : '', 
                 'schedule' => isset($_POST['scb_schedule']) ? 1 : 0,
@@ -395,7 +397,7 @@ class FunnelCTAManager {
                                     <div style="display:flex; gap: 20px; align-items: stretch;">
                                         <!-- Desktop Column -->
                                         <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px;">🖥️ Desktop</h4>
+                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px; display:flex; align-items:center; gap:5px;"><span class="dashicons dashicons-desktop"></span> Desktop</h4>
                                             
                                             <label style="display:block; margin-bottom:5px; font-weight:600;">Tipo de Banner:</label>
                                             <select name="fcm_settings[<?php echo esc_attr($key . '_type'); ?>]" class="fcm-main-type-select-desktop" data-key="<?php echo esc_attr($key); ?>" style="width: 100%; margin-bottom:15px;">
@@ -408,16 +410,20 @@ class FunnelCTAManager {
                                                 <input type="hidden" name="fcm_settings[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($img_id); ?>" class="fcm-img-id">
                                                 <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
                                                 <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                                <div style="margin-top: 15px;">
+                                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
+                                                    <input type="url" name="fcm_settings[<?php echo esc_attr($key . '_url'); ?>]" value="<?php echo esc_url($link_url); ?>" class="regular-text" style="width:100%;" placeholder="https://exemplo.com/pagina">
+                                                </div>
                                             </div>
 
-                                            <div class="fcm-html-wrapper-desktop-<?php echo esc_attr($key); ?>" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
+                                            <div class="fcm-html-wrapper-desktop-<?php echo esc_attr($key); ?>\" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
                                                 <textarea name="fcm_settings[<?php echo esc_attr($key . '_html'); ?>]" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."><?php echo esc_textarea($html_content); ?></textarea>
                                             </div>
                                         </div>
 
                                         <!-- Mobile Column -->
                                         <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px;">📱 Mobile</h4>
+                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px; display:flex; align-items:center; gap:5px;"><span class="dashicons dashicons-smartphone"></span> Mobile</h4>
                                             
                                             <label style="display:block; margin-bottom:5px; font-weight:600;">Tipo de Banner:</label>
                                             <select name="fcm_settings[<?php echo esc_attr($key . '_type_mobile'); ?>]" class="fcm-main-type-select-mobile" data-key="<?php echo esc_attr($key); ?>" style="width: 100%; margin-bottom:15px;">
@@ -430,18 +436,20 @@ class FunnelCTAManager {
                                                 <input type="hidden" name="fcm_settings[<?php echo esc_attr($key . '_mobile'); ?>]" value="<?php echo esc_attr($img_mobile_id); ?>" class="fcm-img-id">
                                                 <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
                                                 <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                                <div style="margin-top: 15px;">
+                                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link Mobile (Deixe vazio para usar o do Desktop):</label>
+                                                    <?php $link_url_mobile = isset($options[$key . '_url_mobile']) ? $options[$key . '_url_mobile'] : ''; ?>
+                                                    <input type="url" name="fcm_settings[<?php echo esc_attr($key . '_url_mobile'); ?>]" value="<?php echo esc_url($link_url_mobile); ?>" class="regular-text" style="width:100%;" placeholder="Ex: https://exemplo.com/mobile">
+                                                </div>
                                             </div>
 
-                                            <div class="fcm-html-wrapper-mobile-<?php echo esc_attr($key); ?>" style="display: <?php echo $type_mobile === 'html' ? 'block' : 'none'; ?>;">
+                                            <div class="fcm-html-wrapper-mobile-<?php echo esc_attr($key); ?>\" style="display: <?php echo $type_mobile === 'html' ? 'block' : 'none'; ?>;">
                                                 <textarea name="fcm_settings[<?php echo esc_attr($key . '_html_mobile'); ?>]" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."><?php echo esc_textarea($html_mobile_content); ?></textarea>
                                             </div>
                                         </div>
                                     </div>
                                     
-                                    <div style="margin-top: 15px; background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd;">
-                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL) - Aplicado para banners do tipo Imagem:</label>
-                                        <input type="url" name="fcm_settings[<?php echo esc_attr($key . '_url'); ?>]" value="<?php echo esc_url($link_url); ?>" class="regular-text" style="width:100%; max-width:600px;" placeholder="https://exemplo.com/pagina">
-                                    </div>
+                                    
                                 </td>
                             </tr>
                             <tr>
@@ -653,7 +661,7 @@ class FunnelCTAManager {
                                     <div style="display:flex; gap: 20px; align-items: stretch;">
                                         <!-- Desktop Column -->
                                         <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px;">🖥️ Desktop</h4>
+                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px; display:flex; align-items:center; gap:5px;"><span class="dashicons dashicons-desktop"></span> Desktop</h4>
                                             
                                             <label style="display:block; margin-bottom:5px; font-weight:600;">Tipo de Banner:</label>
                                             <select name="cb_type" id="cb_type" style="width: 100%; margin-bottom:15px;">
@@ -666,16 +674,20 @@ class FunnelCTAManager {
                                                 <input type="hidden" name="cb_image" id="cb_image" value="" class="fcm-img-id">
                                                 <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
                                                 <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                                <div style="margin-top: 15px;">
+                                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
+                                                    <input type="url" name="cb_url" id="cb_url" class="regular-text" style="width:100%;" placeholder="https://exemplo.com/pagina">
+                                                </div>
                                             </div>
 
-                                            <div id="cb_html_desktop_wrapper" style="display:none;">
+                                            <div id="cb_html_desktop_wrapper\" style="display:none;">
                                                 <textarea name="cb_html" id="cb_html" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
 
                                         <!-- Mobile Column -->
                                         <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px;">📱 Mobile</h4>
+                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px; display:flex; align-items:center; gap:5px;"><span class="dashicons dashicons-smartphone"></span> Mobile</h4>
                                             
                                             <label style="display:block; margin-bottom:5px; font-weight:600;">Tipo de Banner:</label>
                                             <select name="cb_type_mobile" id="cb_type_mobile" style="width: 100%; margin-bottom:15px;">
@@ -688,18 +700,19 @@ class FunnelCTAManager {
                                                 <input type="hidden" name="cb_image_mobile" id="cb_image_mobile" value="" class="fcm-img-id">
                                                 <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
                                                 <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                                <div style="margin-top: 15px;">
+                                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link Mobile (Deixe vazio para usar o do Desktop):</label>
+                                                    <input type="url" name="cb_url_mobile" id="cb_url_mobile" class="regular-text" style="width:100%;" placeholder="Ex: https://exemplo.com/mobile">
+                                                </div>
                                             </div>
 
-                                            <div id="cb_html_mobile_wrapper" style="display:none;">
+                                            <div id="cb_html_mobile_wrapper\" style="display:none;">
                                                 <textarea name="cb_html_mobile" id="cb_html_mobile" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div style="margin-top: 15px; background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd;">
-                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL) - Aplicado para banners do tipo Imagem:</label>
-                                        <input type="url" name="cb_url" id="cb_url" class="regular-text" style="width:100%; max-width:600px;" placeholder="https://exemplo.com/pagina">
-                                    </div>
+                                    
                                 </td>
                             </tr>
 
@@ -859,7 +872,7 @@ class FunnelCTAManager {
                                     <div style="display:flex; gap: 20px; align-items: stretch;">
                                         <!-- Desktop Column -->
                                         <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px;">🖥️ Desktop</h4>
+                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px; display:flex; align-items:center; gap:5px;"><span class="dashicons dashicons-desktop"></span> Desktop</h4>
                                             
                                             <label style="display:block; margin-bottom:5px; font-weight:600;">Tipo de Banner:</label>
                                             <select name="scb_type" id="scb_type" style="width: 100%; margin-bottom:15px;">
@@ -872,16 +885,20 @@ class FunnelCTAManager {
                                                 <input type="hidden" name="scb_image" id="scb_image" value="" class="fcm-img-id">
                                                 <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
                                                 <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                                <div style="margin-top: 15px;">
+                                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
+                                                    <input type="url" name="scb_url" id="scb_url" class="regular-text" style="width:100%;" placeholder="https://exemplo.com/pagina">
+                                                </div>
                                             </div>
 
-                                            <div id="scb_html_desktop_wrapper" style="display:none;">
+                                            <div id="scb_html_desktop_wrapper\" style="display:none;">
                                                 <textarea name="scb_html" id="scb_html" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
 
                                         <!-- Mobile Column -->
                                         <div style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px;">📱 Mobile</h4>
+                                            <h4 style="margin-top:0; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px; font-size:16px; display:flex; align-items:center; gap:5px;"><span class="dashicons dashicons-smartphone"></span> Mobile</h4>
                                             
                                             <label style="display:block; margin-bottom:5px; font-weight:600;">Tipo de Banner:</label>
                                             <select name="scb_type_mobile" id="scb_type_mobile" style="width: 100%; margin-bottom:15px;">
@@ -894,18 +911,19 @@ class FunnelCTAManager {
                                                 <input type="hidden" name="scb_image_mobile" id="scb_image_mobile" value="" class="fcm-img-id">
                                                 <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
                                                 <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                                <div style="margin-top: 15px;">
+                                                    <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link Mobile (Deixe vazio para usar o do Desktop):</label>
+                                                    <input type="url" name="scb_url_mobile" id="scb_url_mobile" class="regular-text" style="width:100%;" placeholder="Ex: https://exemplo.com/mobile">
+                                                </div>
                                             </div>
 
-                                            <div id="scb_html_mobile_wrapper" style="display:none;">
+                                            <div id="scb_html_mobile_wrapper\" style="display:none;">
                                                 <textarea name="scb_html_mobile" id="scb_html_mobile" rows="6" class="large-text code" style="width: 100%;" placeholder="Cole o Shortcode ou HTML..."></textarea>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div style="margin-top: 15px; background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd;">
-                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL) - Aplicado para banners do tipo Imagem:</label>
-                                        <input type="url" name="scb_url" id="scb_url" class="regular-text" style="width:100%; max-width:600px;" placeholder="https://exemplo.com/pagina">
-                                    </div>
+                                    
                                 </td>
                             </tr>
 
@@ -1202,6 +1220,7 @@ class FunnelCTAManager {
                 $('#cb_image_mobile').val('');
                 $('#cb_image_mobile_preview').hide().attr('src', '');
                 $('#cb_url').val('');
+                $('#cb_url_mobile').val('');
                 $('#cb_html').val('');
                 $('#cb_html_mobile').val('');
                 $('#cb_schedule').prop('checked', false).trigger('change');
@@ -1241,6 +1260,7 @@ class FunnelCTAManager {
                 }
                 
                 $('#cb_url').val(data.url);
+                $('#cb_url_mobile').val(data.url_mobile || '');
                 $('#cb_html').val(data.html);
                 $('#cb_html_mobile').val(data.html_mobile || data.html);
                 
@@ -1277,6 +1297,7 @@ class FunnelCTAManager {
                 $('#scb_image_mobile').val('');
                 $('#scb_image_mobile_preview').hide().attr('src', '');
                 $('#scb_url').val('');
+                $('#scb_url_mobile').val('');
                 $('#scb_html').val('');
                 $('#scb_html_mobile').val('');
                 $('#scb_schedule').prop('checked', false).trigger('change');
@@ -1312,6 +1333,7 @@ class FunnelCTAManager {
                 }
                 
                 $('#scb_url').val(data.url);
+                $('#scb_url_mobile').val(data.url_mobile || '');
                 $('#scb_html').val(data.html);
                 $('#scb_html_mobile').val(data.html_mobile || data.html);
                 
@@ -1491,7 +1513,8 @@ class FunnelCTAManager {
             if ($mobile_img_id) {
                 $mobile_url = wp_get_attachment_url($mobile_img_id);
                 $alt_text = get_post_meta($mobile_img_id, '_wp_attachment_image_alt', true);
-                $url = isset($options[$prefix . '_url']) ? $options[$prefix . '_url'] : '#';
+                $url_desktop = isset($options[$prefix . '_url']) ? $options[$prefix . '_url'] : '#';
+                $url = !empty($options[$prefix . '_url_mobile']) ? $options[$prefix . '_url_mobile'] : $url_desktop;
                 $mobile_output = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer" style="display: inline-block; width: 100%%;"><img src="%s" alt="%s" style="max-width: 100%%; height: auto; display: block; margin: 0 auto;"></a>', esc_url($url), esc_url($mobile_url), esc_attr($alt_text));
             } else {
                 $mobile_output = $desktop_output; // fallback
@@ -1549,7 +1572,8 @@ class FunnelCTAManager {
             if ($mobile_img_id) {
                 $mobile_url = wp_get_attachment_url($mobile_img_id);
                 $alt_text = get_post_meta($mobile_img_id, '_wp_attachment_image_alt', true);
-                $url = isset($cb['url']) ? $cb['url'] : '#';
+                $url_desktop = isset($cb['url']) ? $cb['url'] : '#';
+                $url = !empty($cb['url_mobile']) ? $cb['url_mobile'] : $url_desktop;
                 $mobile_output = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer" style="display: inline-block; width: 100%%;"><img src="%s" alt="%s" style="max-width: 100%%; height: auto; display: block; margin: 0 auto;"></a>', esc_url($url), esc_url($mobile_url), esc_attr($alt_text));
             } else {
                 $mobile_output = $desktop_output; // fallback
