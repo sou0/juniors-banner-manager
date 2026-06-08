@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Funnel CTA Manager Pro
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 2.6
+ * Version: 2.9
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -65,6 +65,63 @@ class FunnelCTAManager {
         } catch (Exception $e) {
             return 0;
         }
+    }
+
+    private function render_banner_config_box($args) {
+        $type = $args['type'] ?? 'image';
+        $img_id = $args['img_id'] ?? '';
+        $img_url = $img_id ? wp_get_attachment_url($img_id) : '';
+        $url = $args['url'] ?? '';
+        $html = $args['html'] ?? '';
+        
+        $type_name = $args['type_name'];
+        $image_name = $args['image_name'];
+        $url_name = $args['url_name'];
+        $html_name = $args['html_name'];
+
+        $title = $args['title'];
+        $is_static = $args['is_static'] ?? false;
+        $target_class = $args['target_class'] ?? ('fcm-fields-' . uniqid());
+
+        ob_start();
+        ?>
+        <div class="fcm-banner-box <?php echo $is_static ? 'fcm-static-box' : 'fcm-random-box'; ?>" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative;">
+            <?php if (!$is_static): ?>
+                <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover este banner">
+                    <span class="dashicons dashicons-no-alt"></span>
+                </button>
+            <?php endif; ?>
+            
+            <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px;"><?php echo esc_html($title); ?></h3>
+            
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Banner:</label>
+                <select name="<?php echo esc_attr($type_name); ?>" class="fcm-type-selector" data-target=".<?php echo esc_attr($target_class); ?>" style="width:100%;">
+                    <option value="image" <?php selected($type, 'image'); ?>>Imagem</option>
+                    <option value="html" <?php selected($type, 'html'); ?>>HTML / Shortcode</option>
+                </select>
+            </div>
+
+            <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-image" style="display: <?php echo $type === 'image' ? 'block' : 'none'; ?>;">
+                <div class="fcm-upload-wrapper">
+                    <img src="<?php echo esc_url($img_url); ?>" style="max-width:100%; display:<?php echo $img_url ? 'block' : 'none'; ?>; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
+                    <input type="hidden" name="<?php echo esc_attr($image_name); ?>" value="<?php echo esc_attr($img_id); ?>" class="fcm-img-id">
+                    <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
+                    <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                </div>
+                <div style="margin-top: 15px;">
+                    <label style="display:block; font-weight:600;">Link de Destino:</label>
+                    <input type="url" name="<?php echo esc_attr($url_name); ?>" value="<?php echo esc_url($url); ?>" style="width:100%;" placeholder="<?php echo $is_static ? 'https://exemplo.com' : 'Vazio = Usar link do banner estático'; ?>">
+                </div>
+            </div>
+
+            <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-html" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
+                <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
+                <textarea name="<?php echo esc_attr($html_name); ?>" rows="8" style="width:100%; font-family:monospace;"><?php echo esc_textarea($html); ?></textarea>
+            </div>
+        </div>
+        <?php
+        return ob_get_clean();
     }
 
 
@@ -141,14 +198,43 @@ class FunnelCTAManager {
             
             $id = !empty($_POST['cb_id']) ? sanitize_text_field($_POST['cb_id']) : 'cb_' . time();
             
+            $random_desktop = [];
+            if (isset($_POST['cb_random_desktop']) && is_array($_POST['cb_random_desktop'])) {
+                foreach ($_POST['cb_random_desktop'] as $rb) {
+                    $random_desktop[] = [
+                        'type' => sanitize_text_field($rb['type'] ?? 'image'),
+                        'image' => sanitize_text_field($rb['image'] ?? ''),
+                        'url' => sanitize_text_field($rb['url'] ?? ''),
+                        'html' => wp_unslash($rb['html'] ?? '')
+                    ];
+                }
+            }
+
+            $random_mobile = [];
+            if (isset($_POST['cb_random_mobile']) && is_array($_POST['cb_random_mobile'])) {
+                foreach ($_POST['cb_random_mobile'] as $rb) {
+                    $random_mobile[] = [
+                        'type' => sanitize_text_field($rb['type'] ?? 'image'),
+                        'image' => sanitize_text_field($rb['image'] ?? ''),
+                        'url' => sanitize_text_field($rb['url'] ?? ''),
+                        'html' => wp_unslash($rb['html'] ?? '')
+                    ];
+                }
+            }
+
             $banners[$id] = [
                 'id' => $id,
                 'name' => sanitize_text_field($_POST['cb_name']),
                 'type' => sanitize_text_field($_POST['cb_type']),
+                'type_mobile' => isset($_POST['cb_type_mobile']) ? sanitize_text_field($_POST['cb_type_mobile']) : 'image',
                 'image' => sanitize_text_field($_POST['cb_image']),
                 'image_mobile' => isset($_POST['cb_image_mobile']) ? sanitize_text_field($_POST['cb_image_mobile']) : '',
                 'url' => sanitize_text_field($_POST['cb_url']),
+                'url_mobile' => isset($_POST['cb_url_mobile']) ? sanitize_text_field($_POST['cb_url_mobile']) : '',
                 'html' => wp_unslash($_POST['cb_html']), 
+                'html_mobile' => isset($_POST['cb_html_mobile']) ? wp_unslash($_POST['cb_html_mobile']) : '', 
+                'random_desktop' => $random_desktop,
+                'random_mobile' => $random_mobile,
                 'schedule' => isset($_POST['cb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['cb_start']),
                 'end' => sanitize_text_field($_POST['cb_end']),
@@ -183,14 +269,44 @@ class FunnelCTAManager {
         if (isset($_POST['fcm_save_shortcode']) && isset($_POST['fcm_shortcode_nonce']) && wp_verify_nonce($_POST['fcm_shortcode_nonce'], 'fcm_save_shortcode_action')) {
             $banners = get_option($this->shortcode_banners_option, []);
             $id = !empty($_POST['scb_id']) ? sanitize_text_field($_POST['scb_id']) : 'scb_' . time();
+            
+            $random_desktop = [];
+            if (isset($_POST['scb_random_desktop']) && is_array($_POST['scb_random_desktop'])) {
+                foreach ($_POST['scb_random_desktop'] as $rb) {
+                    $random_desktop[] = [
+                        'type' => sanitize_text_field($rb['type'] ?? 'image'),
+                        'image' => sanitize_text_field($rb['image'] ?? ''),
+                        'url' => sanitize_text_field($rb['url'] ?? ''),
+                        'html' => wp_unslash($rb['html'] ?? '')
+                    ];
+                }
+            }
+
+            $random_mobile = [];
+            if (isset($_POST['scb_random_mobile']) && is_array($_POST['scb_random_mobile'])) {
+                foreach ($_POST['scb_random_mobile'] as $rb) {
+                    $random_mobile[] = [
+                        'type' => sanitize_text_field($rb['type'] ?? 'image'),
+                        'image' => sanitize_text_field($rb['image'] ?? ''),
+                        'url' => sanitize_text_field($rb['url'] ?? ''),
+                        'html' => wp_unslash($rb['html'] ?? '')
+                    ];
+                }
+            }
+
             $banners[$id] = [
                 'id' => $id,
                 'name' => sanitize_text_field($_POST['scb_name']),
                 'type' => sanitize_text_field($_POST['scb_type']),
+                'type_mobile' => isset($_POST['scb_type_mobile']) ? sanitize_text_field($_POST['scb_type_mobile']) : 'image',
                 'image' => sanitize_text_field($_POST['scb_image']),
                 'image_mobile' => isset($_POST['scb_image_mobile']) ? sanitize_text_field($_POST['scb_image_mobile']) : '',
                 'url' => sanitize_text_field($_POST['scb_url']),
+                'url_mobile' => isset($_POST['scb_url_mobile']) ? sanitize_text_field($_POST['scb_url_mobile']) : '',
                 'html' => wp_unslash($_POST['scb_html']), 
+                'html_mobile' => isset($_POST['scb_html_mobile']) ? wp_unslash($_POST['scb_html_mobile']) : '', 
+                'random_desktop' => $random_desktop,
+                'random_mobile' => $random_mobile,
                 'schedule' => isset($_POST['scb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['scb_start']),
                 'end' => sanitize_text_field($_POST['scb_end']),
@@ -327,12 +443,15 @@ class FunnelCTAManager {
 
                     <?php foreach ($stages as $key => $label): 
                         $type = isset($options[$key . '_type']) ? $options[$key . '_type'] : 'image';
+                        $type_mobile = isset($options[$key . '_type_mobile']) ? $options[$key . '_type_mobile'] : 'image';
                         $html_content = isset($options[$key . '_html']) ? $options[$key . '_html'] : '';
+                        $html_mobile_content = isset($options[$key . '_html_mobile']) ? $options[$key . '_html_mobile'] : '';
                         $img_id = isset($options[$key]) ? $options[$key] : '';
                         $img_url = $img_id ? wp_get_attachment_url($img_id) : '';
                         $img_mobile_id = isset($options[$key . '_mobile']) ? $options[$key . '_mobile'] : '';
                         $img_mobile_url = $img_mobile_id ? wp_get_attachment_url($img_mobile_id) : '';
                         $link_url = isset($options[$key . '_url']) ? $options[$key . '_url'] : '';
+                        $link_mobile_url = isset($options[$key . '_url_mobile']) ? $options[$key . '_url_mobile'] : '';
                         $schedule = !empty($options[$key . '_schedule']);
                         $start = isset($options[$key . '_start']) ? $options[$key . '_start'] : '';
                         $end = isset($options[$key . '_end']) ? $options[$key . '_end'] : '';
@@ -382,47 +501,101 @@ class FunnelCTAManager {
                             <hr style="margin: 20px 0;">
                         <?php endif; ?>
 
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+                            <!-- Desktop Column -->
+                            <div class="fcm-banner-column" data-column="desktop" data-key="<?php echo esc_attr($key); ?>">
+                                <?php 
+                                // Static Box
+                                echo $this->render_banner_config_box([
+                                    'title' => 'Configurações Desktop (Estático)',
+                                    'is_static' => true,
+                                    'type' => $type,
+                                    'img_id' => $img_id,
+                                    'url' => $link_url,
+                                    'html' => $html_content,
+                                    'type_name' => "fcm_settings[{$key}_type]",
+                                    'image_name' => "fcm_settings[{$key}]",
+                                    'url_name' => "fcm_settings[{$key}_url]",
+                                    'html_name' => "fcm_settings[{$key}_html]",
+                                    'target_class' => "fcm-desktop-fields-{$key}-static"
+                                ]); 
+                                ?>
+
+                                <!-- Randomized Container -->
+                                <div class="fcm-random-container">
+                                    <?php 
+                                    $random_desktop = isset($options[$key . '_random_desktop']) ? $options[$key . '_random_desktop'] : [];
+                                    foreach ($random_desktop as $idx => $rb):
+                                        echo $this->render_banner_config_box([
+                                            'title' => 'Desktop Randomizado',
+                                            'is_static' => false,
+                                            'type' => $rb['type'] ?? 'image',
+                                            'img_id' => $rb['image'] ?? '',
+                                            'url' => $rb['url'] ?? '',
+                                            'html' => $rb['html'] ?? '',
+                                            'type_name' => "fcm_settings[{$key}_random_desktop][{$idx}][type]",
+                                            'image_name' => "fcm_settings[{$key}_random_desktop][{$idx}][image]",
+                                            'url_name' => "fcm_settings[{$key}_random_desktop][{$idx}][url]",
+                                            'html_name' => "fcm_settings[{$key}_random_desktop][{$idx}][html]",
+                                            'target_class' => "fcm-desktop-fields-{$key}-random-{$idx}"
+                                        ]);
+                                    endforeach;
+                                    ?>
+                                </div>
+
+                                <button type="button" class="button button-secondary fcm-add-random-btn" style="width:100%; margin-top:10px;">
+                                    <span class="dashicons dashicons-plus-alt" style="margin-top:4px;"></span> Adicionar Randomizado para Desktop
+                                </button>
+                            </div>
+
+                            <!-- Mobile Column -->
+                            <div class="fcm-banner-column" data-column="mobile" data-key="<?php echo esc_attr($key); ?>">
+                                <?php 
+                                // Static Box
+                                echo $this->render_banner_config_box([
+                                    'title' => 'Configurações Mobile (Estático)',
+                                    'is_static' => true,
+                                    'type' => $type_mobile,
+                                    'img_id' => $img_mobile_id,
+                                    'url' => $link_mobile_url,
+                                    'html' => $html_mobile_content,
+                                    'type_name' => "fcm_settings[{$key}_type_mobile]",
+                                    'image_name' => "fcm_settings[{$key}_mobile]",
+                                    'url_name' => "fcm_settings[{$key}_url_mobile]",
+                                    'html_name' => "fcm_settings[{$key}_html_mobile]",
+                                    'target_class' => "fcm-mobile-fields-{$key}-static"
+                                ]); 
+                                ?>
+
+                                <!-- Randomized Container -->
+                                <div class="fcm-random-container">
+                                    <?php 
+                                    $random_mobile = isset($options[$key . '_random_mobile']) ? $options[$key . '_random_mobile'] : [];
+                                    foreach ($random_mobile as $idx => $rb):
+                                        echo $this->render_banner_config_box([
+                                            'title' => 'Mobile Randomizado',
+                                            'is_static' => false,
+                                            'type' => $rb['type'] ?? 'image',
+                                            'img_id' => $rb['image'] ?? '',
+                                            'url' => $rb['url'] ?? '',
+                                            'html' => $rb['html'] ?? '',
+                                            'type_name' => "fcm_settings[{$key}_random_mobile][{$idx}][type]",
+                                            'image_name' => "fcm_settings[{$key}_random_mobile][{$idx}][image]",
+                                            'url_name' => "fcm_settings[{$key}_random_mobile][{$idx}][url]",
+                                            'html_name' => "fcm_settings[{$key}_random_mobile][{$idx}][html]",
+                                            'target_class' => "fcm-mobile-fields-{$key}-random-{$idx}"
+                                        ]);
+                                    endforeach;
+                                    ?>
+                                </div>
+
+                                <button type="button" class="button button-secondary fcm-add-random-btn" style="width:100%; margin-top:10px;">
+                                    <span class="dashicons dashicons-plus-alt" style="margin-top:4px;"></span> Adicionar Randomizado para Mobile
+                                </button>
+                            </div>
+                        </div>
+
                         <table class="form-table">
-                            <tr>
-                                <th scope="row"><label><strong>Tipo de Banner</strong></label></th>
-                                <td>
-                                    <select name="fcm_settings[<?php echo esc_attr($key . '_type'); ?>]" class="fcm-main-type-select" data-key="<?php echo esc_attr($key); ?>" style="min-width: 250px;">
-                                        <option value="image" <?php selected($type, 'image'); ?>>Apenas Imagem (Padrão)</option>
-                                        <option value="html" <?php selected($type, 'html'); ?>>Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
-                                </td>
-                            </tr>
-                            <tr class="fcm-main-type-area fcm-main-type-image-<?php echo esc_attr($key); ?>" style="display: <?php echo $type === 'image' ? 'table-row' : 'none'; ?>;">
-                                <th scope="row" style="width: 250px;"><label><strong>Imagem do Banner</strong></label></th>
-                                <td>
-                                    <div style="display:flex; gap: 20px;">
-                                        <div class="fcm-upload-wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
-                                            <img src="<?php echo esc_url($img_url); ?>" style="max-width:100%; display:<?php echo $img_url ? 'block' : 'none'; ?>; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
-                                            <input type="hidden" name="fcm_settings[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($img_id); ?>" class="fcm-img-id">
-                                            <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
-                                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
-                                        </div>
-                                        <div class="fcm-upload-wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile (Opcional)</h4>
-                                            <img src="<?php echo esc_url($img_mobile_url); ?>" style="max-width:100%; display:<?php echo $img_mobile_url ? 'block' : 'none'; ?>; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
-                                            <input type="hidden" name="fcm_settings[<?php echo esc_attr($key . '_mobile'); ?>]" value="<?php echo esc_attr($img_mobile_id); ?>" class="fcm-img-id">
-                                            <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
-                                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
-                                        </div>
-                                    </div>
-                                    <div style="margin-top: 15px;">
-                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
-                                        <input type="url" name="fcm_settings[<?php echo esc_attr($key . '_url'); ?>]" value="<?php echo esc_url($link_url); ?>" class="regular-text" placeholder="https://exemplo.com/pagina">
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr class="fcm-main-type-area fcm-main-type-html-<?php echo esc_attr($key); ?>" style="display: <?php echo $type === 'html' ? 'table-row' : 'none'; ?>;">
-                                <th scope="row"><label><strong>Conteúdo HTML / Shortcode</strong></label></th>
-                                <td>
-                                    <textarea name="fcm_settings[<?php echo esc_attr($key . '_html'); ?>]" rows="6" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."><?php echo esc_textarea($html_content); ?></textarea>
-                                </td>
-                            </tr>
                             <tr>
                                 <th scope="row"><label><strong>Exibição Simultânea</strong></label></th>
                                 <td>
@@ -581,7 +754,7 @@ class FunnelCTAManager {
                                     <td><?php echo esc_html($pos_label); ?></td>
                                     <td>
                                         <a href="#" class="button button-small btn-edit-custom-banner" 
-                                           data-banner='<?php echo esc_attr(json_encode($cb)); ?>'>Editar</a>
+                                           data-banner='<?php echo esc_attr(json_encode($this->enrich_banner_data($cb))); ?>'>Editar</a>
                                         <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=funnel-cta&tab=custom-list&fcm_del_cb=' . $cb['id']), 'del_cb_' . $cb['id']); ?>" class="button button-small" style="color:#b32d2e; border-color:#b32d2e;" onclick="return confirm('Tem certeza?');">Excluir</a>
                                     </td>
                                 </tr>
@@ -627,45 +800,55 @@ class FunnelCTAManager {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label>Tipo de Banner</label></th>
+                                <th scope="row"><label>Configurações de Banner</label></th>
                                 <td>
-                                    <select name="cb_type" id="cb_type">
-                                        <option value="image">Apenas Imagem (Padrão)</option>
-                                        <option value="html">Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
-                                </td>
-                            </tr>
-                            
-                            <tr class="cb-type-area cb-type-image">
-                                <th scope="row"><label>Imagem do Banner</label></th>
-                                <td>
-                                    <div style="display:flex; gap: 20px;">
-                                        <div class="fcm-upload-wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
-                                            <img src="" style="max-width:100%; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview" id="cb_image_preview">
-                                            <input type="hidden" name="cb_image" id="cb_image" value="" class="fcm-img-id">
-                                            <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
-                                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                        <!-- Desktop Column -->
+                                        <div class="fcm-banner-column" data-column="desktop" data-key="cb">
+                                            <div class="fcm-static-container">
+                                                <?php 
+                                                echo $this->render_banner_config_box([
+                                                    'title' => 'Desktop (Estático)',
+                                                    'is_static' => true,
+                                                    'type_name' => 'cb_type',
+                                                    'image_name' => 'cb_image',
+                                                    'url_name' => 'cb_url',
+                                                    'html_name' => 'cb_html',
+                                                    'target_class' => 'cb-desktop-fields'
+                                                ]); 
+                                                ?>
+                                            </div>
+                                            <div class="fcm-random-container">
+                                                <!-- Populated via JS -->
+                                            </div>
+                                            <button type="button" class="button button-secondary fcm-add-random-btn" style="width:100%; margin-top:10px;">
+                                                <span class="dashicons dashicons-plus-alt" style="margin-top:4px;"></span> Adicionar Randomizado para Desktop
+                                            </button>
                                         </div>
-                                        <div class="fcm-upload-wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile (Opcional)</h4>
-                                            <img src="" style="max-width:100%; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview" id="cb_image_mobile_preview">
-                                            <input type="hidden" name="cb_image_mobile" id="cb_image_mobile" value="" class="fcm-img-id">
-                                            <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
-                                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
-                                        </div>
-                                    </div>
-                                    <div style="margin-top: 15px;">
-                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
-                                        <input type="url" name="cb_url" id="cb_url" class="regular-text" placeholder="https://exemplo.com/pagina">
-                                    </div>
-                                </td>
-                            </tr>
 
-                            <tr class="cb-type-area cb-type-html" style="display:none;">
-                                <th scope="row"><label>Conteúdo HTML / Shortcode</label></th>
-                                <td>
-                                    <textarea name="cb_html" id="cb_html" rows="6" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."></textarea>
+                                        <!-- Mobile Column -->
+                                        <div class="fcm-banner-column" data-column="mobile" data-key="cb">
+                                            <div class="fcm-static-container">
+                                                <?php 
+                                                echo $this->render_banner_config_box([
+                                                    'title' => 'Mobile (Estático)',
+                                                    'is_static' => true,
+                                                    'type_name' => 'cb_type_mobile',
+                                                    'image_name' => 'cb_image_mobile',
+                                                    'url_name' => 'cb_url_mobile',
+                                                    'html_name' => 'cb_html_mobile',
+                                                    'target_class' => 'cb-mobile-fields'
+                                                ]); 
+                                                ?>
+                                            </div>
+                                            <div class="fcm-random-container">
+                                                <!-- Populated via JS -->
+                                            </div>
+                                            <button type="button" class="button button-secondary fcm-add-random-btn" style="width:100%; margin-top:10px;">
+                                                <span class="dashicons dashicons-plus-alt" style="margin-top:4px;"></span> Adicionar Randomizado para Mobile
+                                            </button>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
 
@@ -769,7 +952,7 @@ class FunnelCTAManager {
                                     <td><?php echo $this->get_banner_status_html($scb, '', true); ?></td>
                                     <td>
                                         <a href="#" class="button button-small btn-edit-shortcode-banner" 
-                                           data-banner='<?php echo esc_attr(json_encode($scb)); ?>'>Editar</a>
+                                           data-banner='<?php echo esc_attr(json_encode($this->enrich_banner_data($scb))); ?>'>Editar</a>
                                         <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=funnel-cta&tab=shortcode-list&fcm_del_scb=' . $scb['id']), 'del_scb_' . $scb['id']); ?>" class="button button-small" style="color:#b32d2e; border-color:#b32d2e;" onclick="return confirm('Tem certeza?');">Excluir</a>
                                     </td>
                                 </tr>
@@ -820,45 +1003,55 @@ class FunnelCTAManager {
                                 </td>
                             </tr>
                             <tr>
-                                <th scope="row"><label>Tipo de Banner</label></th>
+                                <th scope="row"><label>Configurações de Banner</label></th>
                                 <td>
-                                    <select name="scb_type" id="scb_type">
-                                        <option value="image">Apenas Imagem (Padrão)</option>
-                                        <option value="html">Shortcode Elementor / HTML Personalizado</option>
-                                    </select>
-                                </td>
-                            </tr>
-                            
-                            <tr class="scb-type-area scb-type-image">
-                                <th scope="row"><label>Imagem do Banner</label></th>
-                                <td>
-                                    <div style="display:flex; gap: 20px;">
-                                        <div class="fcm-upload-wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:10px;">Desktop</h4>
-                                            <img src="" style="max-width:100%; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview" id="scb_image_preview">
-                                            <input type="hidden" name="scb_image" id="scb_image" value="" class="fcm-img-id">
-                                            <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
-                                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                        <!-- Desktop Column -->
+                                        <div class="fcm-banner-column" data-column="desktop" data-key="scb">
+                                            <div class="fcm-static-container">
+                                                <?php 
+                                                echo $this->render_banner_config_box([
+                                                    'title' => 'Desktop (Estático)',
+                                                    'is_static' => true,
+                                                    'type_name' => 'scb_type',
+                                                    'image_name' => 'scb_image',
+                                                    'url_name' => 'scb_url',
+                                                    'html_name' => 'scb_html',
+                                                    'target_class' => 'scb-desktop-fields'
+                                                ]); 
+                                                ?>
+                                            </div>
+                                            <div class="fcm-random-container">
+                                                <!-- Populated via JS -->
+                                            </div>
+                                            <button type="button" class="button button-secondary fcm-add-random-btn" style="width:100%; margin-top:10px;">
+                                                <span class="dashicons dashicons-plus-alt" style="margin-top:4px;"></span> Adicionar Randomizado para Desktop
+                                            </button>
                                         </div>
-                                        <div class="fcm-upload-wrapper" style="background:#f9f9f9; padding: 15px; border-radius: 5px; border: 1px solid #ddd; flex:1;">
-                                            <h4 style="margin-top:0; margin-bottom:10px;">Mobile (Opcional)</h4>
-                                            <img src="" style="max-width:100%; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview" id="scb_image_mobile_preview">
-                                            <input type="hidden" name="scb_image_mobile" id="scb_image_mobile" value="" class="fcm-img-id">
-                                            <button type="button" class="button button-secondary fcm-upload-btn"><span class="dashicons dashicons-format-image" style="margin-top:4px;"></span> Escolher Imagem</button>
-                                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;"><span class="dashicons dashicons-trash" style="margin-top:4px;"></span> Remover</button>
-                                        </div>
-                                    </div>
-                                    <div style="margin-top: 15px;">
-                                        <label style="display:block; margin-bottom: 5px; font-weight: 600;">Link de Destino (URL):</label>
-                                        <input type="url" name="scb_url" id="scb_url" class="regular-text" placeholder="https://exemplo.com/pagina">
-                                    </div>
-                                </td>
-                            </tr>
 
-                            <tr class="scb-type-area scb-type-html" style="display:none;">
-                                <th scope="row"><label>Conteúdo HTML / Shortcode</label></th>
-                                <td>
-                                    <textarea name="scb_html" id="scb_html" rows="6" class="large-text code" placeholder="Cole aqui seu [elementor-template id='xx'] ou código HTML..."></textarea>
+                                        <!-- Mobile Column -->
+                                        <div class="fcm-banner-column" data-column="mobile" data-key="scb">
+                                            <div class="fcm-static-container">
+                                                <?php 
+                                                echo $this->render_banner_config_box([
+                                                    'title' => 'Mobile (Estático)',
+                                                    'is_static' => true,
+                                                    'type_name' => 'scb_type_mobile',
+                                                    'image_name' => 'scb_image_mobile',
+                                                    'url_name' => 'scb_url_mobile',
+                                                    'html_name' => 'scb_html_mobile',
+                                                    'target_class' => 'scb-mobile-fields'
+                                                ]); 
+                                                ?>
+                                            </div>
+                                            <div class="fcm-random-container">
+                                                <!-- Populated via JS -->
+                                            </div>
+                                            <button type="button" class="button button-secondary fcm-add-random-btn" style="width:100%; margin-top:10px;">
+                                                <span class="dashicons dashicons-plus-alt" style="margin-top:4px;"></span> Adicionar Randomizado para Mobile
+                                            </button>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
 
@@ -1069,15 +1262,16 @@ class FunnelCTAManager {
                 }
             });
 
-            // Main Type toggle
-            $('.fcm-main-type-select').change(function(){
-                var key = $(this).data('key');
-                $('.fcm-main-type-image-' + key).hide();
-                $('.fcm-main-type-html-' + key).hide();
-                $('.fcm-main-type-' + $(this).val() + '-' + key).show();
+            // Universal Type Toggle
+            $(document).on('change', '.fcm-type-selector', function(){
+                var target = $(this).data('target');
+                var type = $(this).val();
+                $(target).hide();
+                $(target + '.fcm-type-field-' + type).show();
             });
 
-            $('.fcm-upload-btn').click(function(e){
+            // Media Uploader Delegation
+            $(document).on('click', '.fcm-upload-btn', function(e){
                 var btn = $(this);
                 var uploader = wp.media({title: 'Escolher Imagem', button: {text: 'Usar Imagem'}, multiple: false}).on('select', function() {
                     var attachment = uploader.state().get('selection').first().toJSON();
@@ -1086,17 +1280,111 @@ class FunnelCTAManager {
                 }).open();
             });
 
-            $('.fcm-remove-btn').click(function(){
+            $(document).on('click', '.fcm-remove-btn', function(){
                 $(this).siblings('.fcm-preview').hide();
                 $(this).siblings('.fcm-img-id').val('');
             });
 
-            // ----- BANNERS DE OVERRIDE LOGIC ----- //
-            $('#cb_type').change(function(){
-                $('.cb-type-area').hide();
-                $('.cb-type-' + $(this).val()).show();
+            // Add Randomized Banner
+            $('.fcm-add-random-btn').click(function(){
+                var column = $(this).closest('.fcm-banner-column');
+                var colType = column.data('column');
+                var key = column.data('key');
+                var container = column.find('.fcm-random-container');
+                var uniqueIdx = Date.now(); // Unique index to avoid collisions
+                
+                var targetClass = 'fcm-' + key + '-' + colType + '-random-' + uniqueIdx;
+                var namePrefix = '';
+                
+                if(key === 'cb' || key === 'scb') {
+                    namePrefix = key + '_random_' + colType + '[' + uniqueIdx + ']';
+                } else {
+                    namePrefix = 'fcm_settings[' + key + '_random_' + colType + '][' + uniqueIdx + ']';
+                }
+
+                var html = `
+                <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative;">
+                    <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover este banner">
+                        <span class="dashicons dashicons-no-alt"></span>
+                    </button>
+                    <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px;">${colType.charAt(0).toUpperCase() + colType.slice(1)} Randomizado</h3>
+                    <div style="margin-bottom: 15px;">
+                        <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Banner:</label>
+                        <select name="${namePrefix}[type]" class="fcm-type-selector" data-target=".${targetClass}" style="width:100%;">
+                            <option value="image" selected>Imagem</option>
+                            <option value="html">HTML / Shortcode</option>
+                        </select>
+                    </div>
+                    <div class="${targetClass} fcm-type-field-image" style="display: block;">
+                        <div class="fcm-upload-wrapper">
+                            <img src="" style="max-width:100%; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
+                            <input type="hidden" name="${namePrefix}[image]" value="" class="fcm-img-id">
+                            <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
+                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <label style="display:block; font-weight:600;">Link de Destino:</label>
+                            <input type="url" name="${namePrefix}[url]" value="" style="width:100%;" placeholder="Vazio = Usar link do banner estático">
+                        </div>
+                    </div>
+                    <div class="${targetClass} fcm-type-field-html" style="display: none;">
+                        <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
+                        <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace;"></textarea>
+                    </div>
+                </div>`;
+                
+                container.append(html);
             });
 
+            $(document).on('click', '.fcm-remove-box-btn', function(){
+                if(confirm('Remover este banner randomizado?')){
+                    $(this).closest('.fcm-banner-box').remove();
+                }
+            });
+
+            function populateRandomBanners(container, banners, key, colType) {
+                container.empty();
+                if(!banners || !banners.length) return;
+                
+                banners.forEach(function(rb, index){
+                    var targetClass = 'fcm-' + key + '-' + colType + '-random-' + index + '-' + Date.now();
+                    var namePrefix = key + '_random_' + colType + '[' + index + ']';
+                    
+                    var html = `
+                    <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative;">
+                        <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover">
+                            <span class="dashicons dashicons-no-alt"></span>
+                        </button>
+                        <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px;">${colType.charAt(0).toUpperCase() + colType.slice(1)} Randomizado</h3>
+                        <div style="margin-bottom: 15px;">
+                            <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Banner:</label>
+                            <select name="${namePrefix}[type]" class="fcm-type-selector" data-target=".${targetClass}" style="width:100%;">
+                                <option value="image" ${rb.type === 'image' ? 'selected' : ''}>Imagem</option>
+                                <option value="html" ${rb.type === 'html' ? 'selected' : ''}>HTML / Shortcode</option>
+                            </select>
+                        </div>
+                        <div class="${targetClass} fcm-type-field-image" style="display: ${rb.type === 'image' ? 'block' : 'none'};">
+                            <div class="fcm-upload-wrapper">
+                                <img src="${rb.image_url || ''}" style="max-width:100%; display:${rb.image_url ? 'block' : 'none'}; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
+                                <input type="hidden" name="${namePrefix}[image]" value="${rb.image || ''}" class="fcm-img-id">
+                                <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
+                                <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                            </div>
+                            <div style="margin-top: 15px;">
+                                <label style="display:block; font-weight:600;">Link de Destino:</label>
+                                <input type="url" name="${namePrefix}[url]" value="${rb.url || ''}" style="width:100%;" placeholder="Vazio = Usar link do banner estático">
+                            </div>
+                        </div>
+                        <div class="${targetClass} fcm-type-field-html" style="display: ${rb.type === 'html' ? 'block' : 'none'};">
+                            <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
+                            <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace;">${rb.html || ''}</textarea>
+                        </div>
+                    </div>`;
+                    container.append(html);
+                });
+            }
+
+            // ----- BANNERS DE OVERRIDE LOGIC ----- //
             $('#btn-create-custom-banner').click(function(e){
                 e.preventDefault();
                 $('#custom-edit-title').text('Criar Banner de Override');
@@ -1105,13 +1393,22 @@ class FunnelCTAManager {
                 
                 $('#cb_name').val('');
                 $('#cb_status').val('active');
+                
                 $('#cb_type').val('image').trigger('change');
+                $('#cb_type_mobile').val('image').trigger('change');
+                
                 $('#cb_image').val('');
                 $('#cb_image_preview').hide().attr('src', '');
                 $('#cb_image_mobile').val('');
                 $('#cb_image_mobile_preview').hide().attr('src', '');
+                
                 $('#cb_url').val('');
+                $('#cb_url_mobile').val('');
                 $('#cb_html').val('');
+                $('#cb_html_mobile').val('');
+
+                $('.fcm-banner-column[data-key="cb"] .fcm-random-container').empty();
+                
                 $('#cb_schedule').prop('checked', false).trigger('change');
                 $('#cb_allow_multiple').prop('checked', false);
                 $('#cb_start').val('');
@@ -1132,23 +1429,30 @@ class FunnelCTAManager {
                 $('.cb_dynamic_id').text(data.id);
                 $('#cb_name').val(data.name);
                 $('#cb_status').val(data.status);
-                $('#cb_type').val(data.type).trigger('change');
+                
+                $('#cb_type').val(data.type || 'image').trigger('change');
+                $('#cb_type_mobile').val(data.type_mobile || 'image').trigger('change');
                 
                 $('#cb_image').val(data.image);
-                if(data.image) { 
-                    $('#cb_image_preview').attr('src', '<?php echo admin_url('images/media-button.png'); ?>').show();
+                if(data.image_url) { 
+                    $('#cb_image_preview').attr('src', data.image_url).show();
                 } else {
                     $('#cb_image_preview').hide();
                 }
                 $('#cb_image_mobile').val(data.image_mobile);
-                if(data.image_mobile) { 
-                    $('#cb_image_mobile_preview').attr('src', '<?php echo admin_url('images/media-button.png'); ?>').show();
+                if(data.image_mobile_url) { 
+                    $('#cb_image_mobile_preview').attr('src', data.image_mobile_url).show();
                 } else {
                     $('#cb_image_mobile_preview').hide();
                 }
                 
                 $('#cb_url').val(data.url);
+                $('#cb_url_mobile').val(data.url_mobile);
                 $('#cb_html').val(data.html);
+                $('#cb_html_mobile').val(data.html_mobile);
+
+                populateRandomBanners($('.fcm-banner-column[data-key="cb"][data-column="desktop"] .fcm-random-container'), data.random_desktop, 'cb', 'desktop');
+                populateRandomBanners($('.fcm-banner-column[data-key="cb"][data-column="mobile"] .fcm-random-container'), data.random_mobile, 'cb', 'mobile');
                 
                 $('#cb_schedule').prop('checked', data.schedule == 1).trigger('change');
                 $('#cb_allow_multiple').prop('checked', data.allow_multiple == 1);
@@ -1163,11 +1467,6 @@ class FunnelCTAManager {
             });
 
             // ----- BANNERS SHORTCODE LOGIC ----- //
-            $('#scb_type').change(function(){
-                $('.scb-type-area').hide();
-                $('.scb-type-' + $(this).val()).show();
-            });
-
             $('#btn-create-shortcode-banner').click(function(e){
                 e.preventDefault();
                 $('#shortcode-edit-title').text('Criar Novo Banner Shortcode');
@@ -1176,13 +1475,22 @@ class FunnelCTAManager {
                 
                 $('#scb_name').val('');
                 $('#scb_status').val('active');
+                
                 $('#scb_type').val('image').trigger('change');
+                $('#scb_type_mobile').val('image').trigger('change');
+                
                 $('#scb_image').val('');
                 $('#scb_image_preview').hide().attr('src', '');
                 $('#scb_image_mobile').val('');
                 $('#scb_image_mobile_preview').hide().attr('src', '');
+                
                 $('#scb_url').val('');
+                $('#scb_url_mobile').val('');
                 $('#scb_html').val('');
+                $('#scb_html_mobile').val('');
+
+                $('.fcm-banner-column[data-key="scb"] .fcm-random-container').empty();
+                
                 $('#scb_schedule').prop('checked', false).trigger('change');
                 $('#scb_start').val('');
                 $('#scb_end').val('');
@@ -1199,23 +1507,30 @@ class FunnelCTAManager {
                 $('.scb_dynamic_id').text(data.id);
                 $('#scb_name').val(data.name);
                 $('#scb_status').val(data.status);
-                $('#scb_type').val(data.type).trigger('change');
+                
+                $('#scb_type').val(data.type || 'image').trigger('change');
+                $('#scb_type_mobile').val(data.type_mobile || 'image').trigger('change');
                 
                 $('#scb_image').val(data.image);
-                if(data.image) { 
-                    $('#scb_image_preview').attr('src', '<?php echo admin_url('images/media-button.png'); ?>').show();
+                if(data.image_url) { 
+                    $('#scb_image_preview').attr('src', data.image_url).show();
                 } else {
                     $('#scb_image_preview').hide();
                 }
                 $('#scb_image_mobile').val(data.image_mobile);
-                if(data.image_mobile) { 
-                    $('#scb_image_mobile_preview').attr('src', '<?php echo admin_url('images/media-button.png'); ?>').show();
+                if(data.image_mobile_url) { 
+                    $('#scb_image_mobile_preview').attr('src', data.image_mobile_url).show();
                 } else {
                     $('#scb_image_mobile_preview').hide();
                 }
                 
                 $('#scb_url').val(data.url);
+                $('#scb_url_mobile').val(data.url_mobile);
                 $('#scb_html').val(data.html);
+                $('#scb_html_mobile').val(data.html_mobile);
+
+                populateRandomBanners($('.fcm-banner-column[data-key="scb"][data-column="desktop"] .fcm-random-container'), data.random_desktop, 'scb', 'desktop');
+                populateRandomBanners($('.fcm-banner-column[data-key="scb"][data-column="mobile"] .fcm-random-container'), data.random_mobile, 'scb', 'mobile');
                 
                 $('#scb_schedule').prop('checked', data.schedule == 1).trigger('change');
                 $('#scb_start').val(data.start);
@@ -1367,76 +1682,207 @@ class FunnelCTAManager {
         return true;
     }
 
-    public function generate_banner_html_from_options($options, $prefix) {
-        $type = isset($options[$prefix . '_type']) ? $options[$prefix . '_type'] : 'image';
-        if ($type === 'image') {
-            $img_id = isset($options[$prefix]) ? $options[$prefix] : '';
-            if (!$img_id) return '';
-            
-            $desktop_url = wp_get_attachment_url($img_id);
-            $alt_text = get_post_meta($img_id, '_wp_attachment_image_alt', true);
-            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">';
-            
-            $mobile_img_id = isset($options[$prefix . '_mobile']) ? $options[$prefix . '_mobile'] : '';
-            $url = isset($options[$prefix . '_url']) ? $options[$prefix . '_url'] : '#';
-            
-            $img_html = '';
-            if ($mobile_img_id) {
-                $mobile_url = wp_get_attachment_url($mobile_img_id);
-                $img_html .= '<picture>';
-                $img_html .= '<source media="(max-width: 768px)" srcset="' . esc_url($mobile_url) . '">';
-                $img_html .= $desktop_img;
-                $img_html .= '</picture>';
-            } else {
-                $img_html = $desktop_img;
-            }
+    private function is_banner_valid($b) {
+        if (!isset($b['type'])) return false;
+        if ($b['type'] === 'image' && !empty($b['image'])) return true;
+        if ($b['type'] === 'html' && !empty(trim($b['html']))) return true;
+        return false;
+    }
 
-            return sprintf(
-                '<div class="fcm-cta-container" style="margin: 40px 0; text-align: center;">
-                    <a href="%s" target="_blank" rel="noopener noreferrer" style="display: inline-block;">%s</a>
-                </div>',
-                esc_url($url),
-                $img_html
-            );
-        } else {
-            $html = isset($options[$prefix . '_html']) ? $options[$prefix . '_html'] : '';
-            if (empty(trim($html))) return '';
-            return '<div class="fcm-cta-container" style="margin: 40px 0;">' . do_shortcode($html) . '</div>';
+    private function enrich_banner_data($b) {
+        if (!empty($b['image'])) {
+            $b['image_url'] = wp_get_attachment_url($b['image']);
         }
+        if (!empty($b['image_mobile'])) {
+            $b['image_mobile_url'] = wp_get_attachment_url($b['image_mobile']);
+        }
+        
+        if (isset($b['random_desktop']) && is_array($b['random_desktop'])) {
+            foreach ($b['random_desktop'] as &$rb) {
+                if (!empty($rb['image'])) {
+                    $rb['image_url'] = wp_get_attachment_url($rb['image']);
+                }
+            }
+        }
+        if (isset($b['random_mobile']) && is_array($b['random_mobile'])) {
+            foreach ($b['random_mobile'] as &$rb) {
+                if (!empty($rb['image'])) {
+                    $rb['image_url'] = wp_get_attachment_url($rb['image']);
+                }
+            }
+        }
+        return $b;
+    }
+
+    private function get_random_banner($random_banners, $static_banner) {
+        $pool = [];
+        
+        if ($this->is_banner_valid($static_banner)) {
+            $pool[] = $static_banner;
+        }
+        
+        if (is_array($random_banners) && !empty($random_banners)) {
+            foreach ($random_banners as $rb) {
+                if ($this->is_banner_valid($rb)) {
+                    // Fallback de link para o estático se o randomizado estiver vazio
+                    if (empty($rb['url']) && !empty($static_banner['url'])) {
+                        $rb['url'] = $static_banner['url'];
+                    }
+                    $pool[] = $rb;
+                }
+            }
+        }
+        
+        if (empty($pool)) return null;
+        
+        // Se houver apenas um, retorna ele
+        if (count($pool) === 1) return $pool[0];
+
+        // Embaralhar o pool para garantir aleatoriedade real
+        shuffle($pool);
+        
+        // Retornar um item aleatório
+        return $pool[array_rand($pool)];
+    }
+
+    public function generate_banner_html_from_options($options, $prefix) {
+        // Preparar Banners Estáticos
+        $static_desktop = [
+            'type' => $options[$prefix . '_type'] ?? 'image',
+            'image' => $options[$prefix] ?? '',
+            'url' => $options[$prefix . '_url'] ?? '',
+            'html' => $options[$prefix . '_html'] ?? ''
+        ];
+        $static_mobile = [
+            'type' => $options[$prefix . '_type_mobile'] ?? 'image',
+            'image' => $options[$prefix . '_mobile'] ?? '',
+            'url' => $options[$prefix . '_url_mobile'] ?? '',
+            'html' => $options[$prefix . '_html_mobile'] ?? ''
+        ];
+
+        // Randomizados
+        $random_desktop = $options[$prefix . '_random_desktop'] ?? [];
+        $random_mobile = $options[$prefix . '_random_mobile'] ?? [];
+
+        // Escolher
+        $picked_desktop = $this->get_random_banner($random_desktop, $static_desktop);
+        $picked_mobile = $this->get_random_banner($random_mobile, $static_mobile);
+
+        // Fallback: Se mobile estiver vazio, tenta o desktop estático
+        if (!$picked_mobile && $this->is_banner_valid($static_desktop)) {
+            $picked_mobile = $static_desktop;
+        }
+
+        if (!$picked_desktop && !$picked_mobile) return '';
+
+        $html_desktop = '';
+        $html_mobile = '';
+
+        if ($picked_desktop) {
+            if ($picked_desktop['type'] === 'image') {
+                $img_url = wp_get_attachment_url($picked_desktop['image']);
+                $alt = get_post_meta($picked_desktop['image'], '_wp_attachment_image_alt', true);
+                $url = !empty($picked_desktop['url']) ? $picked_desktop['url'] : '#';
+                $html_desktop = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer"><img src="%s" alt="%s" style="max-width:100%%; height:auto; display:block; margin:0 auto;"></a>', esc_url($url), esc_url($img_url), esc_attr($alt));
+            } else {
+                $html_desktop = do_shortcode($picked_desktop['html'] ?? '');
+            }
+        }
+
+        if ($picked_mobile) {
+            if ($picked_mobile['type'] === 'image') {
+                $img_url = wp_get_attachment_url($picked_mobile['image']);
+                $alt = get_post_meta($picked_mobile['image'], '_wp_attachment_image_alt', true);
+                $url = !empty($picked_mobile['url']) ? $picked_mobile['url'] : '#';
+                $html_mobile = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer"><img src="%s" alt="%s" style="max-width:100%%; height:auto; display:block; margin:0 auto;"></a>', esc_url($url), esc_url($img_url), esc_attr($alt));
+            } else {
+                $html_mobile = do_shortcode($picked_mobile['html'] ?? '');
+            }
+        }
+
+        $out = '<div class="fcm-cta-container" style="margin: 40px 0; text-align: center;">';
+        if ($html_desktop === $html_mobile) {
+            $out .= $html_desktop;
+        } else {
+            if (!empty($html_desktop)) $out .= '<div class="fcm-desktop-only">' . $html_desktop . '</div>';
+            if (!empty($html_mobile)) $out .= '<div class="fcm-mobile-only">' . $html_mobile . '</div>';
+            $out .= '<style>
+                @media (max-width: 768px) { .fcm-desktop-only { display: none !important; } .fcm-mobile-only { display: block !important; } }
+                @media (min-width: 769px) { .fcm-desktop-only { display: block !important; } .fcm-mobile-only { display: none !important; } }
+            </style>';
+        }
+        $out .= '</div>';
+        return $out;
     }
 
     public function generate_custom_banner_html($cb) {
-        if ($cb['type'] === 'image') {
-            if (empty($cb['image'])) return '';
-            
-            $desktop_url = wp_get_attachment_url($cb['image']);
-            $alt_text = get_post_meta($cb['image'], '_wp_attachment_image_alt', true);
-            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">';
-            
-            $mobile_img_id = isset($cb['image_mobile']) ? $cb['image_mobile'] : '';
-            
-            $img_html = '';
-            if ($mobile_img_id) {
-                $mobile_url = wp_get_attachment_url($mobile_img_id);
-                $img_html .= '<picture>';
-                $img_html .= '<source media="(max-width: 768px)" srcset="' . esc_url($mobile_url) . '">';
-                $img_html .= $desktop_img;
-                $img_html .= '</picture>';
-            } else {
-                $img_html = $desktop_img;
-            }
+        // Preparar Estáticos
+        $static_desktop = [
+            'type' => $cb['type'] ?? 'image',
+            'image' => $cb['image'] ?? '',
+            'url' => $cb['url'] ?? '',
+            'html' => $cb['html'] ?? ''
+        ];
+        $static_mobile = [
+            'type' => $cb['type_mobile'] ?? 'image',
+            'image' => $cb['image_mobile'] ?? '',
+            'url' => $cb['url_mobile'] ?? '',
+            'html' => $cb['html_mobile'] ?? ''
+        ];
 
-            return sprintf(
-                '<div class="fcm-cta-container fcm-custom-cta" style="margin: 40px 0; text-align: center;">
-                    <a href="%s" target="_blank" rel="noopener noreferrer" style="display: inline-block;">%s</a>
-                </div>',
-                esc_url($cb['url']),
-                $img_html
-            );
-        } else {
-            if (empty(trim($cb['html']))) return '';
-            return '<div class="fcm-cta-container fcm-custom-cta" style="margin: 40px 0;">' . do_shortcode($cb['html']) . '</div>';
+        // Randomizados
+        $random_desktop = $cb['random_desktop'] ?? [];
+        $random_mobile = $cb['random_mobile'] ?? [];
+
+        // Escolher
+        $picked_desktop = $this->get_random_banner($random_desktop, $static_desktop);
+        $picked_mobile = $this->get_random_banner($random_mobile, $static_mobile);
+
+        // Fallback Mobile
+        if (!$picked_mobile && $this->is_banner_valid($static_desktop)) {
+            $picked_mobile = $static_desktop;
         }
+
+        if (!$picked_desktop && !$picked_mobile) return '';
+
+        $html_desktop = '';
+        $html_mobile = '';
+
+        if ($picked_desktop) {
+            if ($picked_desktop['type'] === 'image') {
+                $img_url = wp_get_attachment_url($picked_desktop['image']);
+                $alt = get_post_meta($picked_desktop['image'], '_wp_attachment_image_alt', true);
+                $url = !empty($picked_desktop['url']) ? $picked_desktop['url'] : '#';
+                $html_desktop = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer"><img src="%s" alt="%s" style="max-width:100%%; height:auto; display:block; margin:0 auto;"></a>', esc_url($url), esc_url($img_url), esc_attr($alt));
+            } else {
+                $html_desktop = do_shortcode($picked_desktop['html'] ?? '');
+            }
+        }
+
+        if ($picked_mobile) {
+            if ($picked_mobile['type'] === 'image') {
+                $img_url = wp_get_attachment_url($picked_mobile['image']);
+                $alt = get_post_meta($picked_mobile['image'], '_wp_attachment_image_alt', true);
+                $url = !empty($picked_mobile['url']) ? $picked_mobile['url'] : '#';
+                $html_mobile = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer"><img src="%s" alt="%s" style="max-width:100%%; height:auto; display:block; margin:0 auto;"></a>', esc_url($url), esc_url($img_url), esc_attr($alt));
+            } else {
+                $html_mobile = do_shortcode($picked_mobile['html'] ?? '');
+            }
+        }
+
+        $out = '<div class="fcm-cta-container fcm-custom-cta" style="margin: 40px 0; text-align: center;">';
+        if ($html_desktop === $html_mobile) {
+            $out .= $html_desktop;
+        } else {
+            if (!empty($html_desktop)) $out .= '<div class="fcm-desktop-only">' . $html_desktop . '</div>';
+            if (!empty($html_mobile)) $out .= '<div class="fcm-mobile-only">' . $html_mobile . '</div>';
+            $out .= '<style>
+                @media (max-width: 768px) { .fcm-desktop-only { display: none !important; } .fcm-mobile-only { display: block !important; } }
+                @media (min-width: 769px) { .fcm-desktop-only { display: block !important; } .fcm-mobile-only { display: none !important; } }
+            </style>';
+        }
+        $out .= '</div>';
+        return $out;
     }
 
     public function inject_cta_via_js() {
@@ -1679,37 +2125,73 @@ class FunnelCTAManager {
             if ($end && $now > $end) return '';
         }
 
-        if ($scb['type'] === 'image') {
-            if (empty($scb['image'])) return '';
-            
-            $desktop_url = wp_get_attachment_url($scb['image']);
-            if (!$desktop_url) return '';
-            
-            $alt_text = get_post_meta($scb['image'], '_wp_attachment_image_alt', true);
-            $desktop_img = '<img src="' . esc_url($desktop_url) . '" alt="' . esc_attr($alt_text) . '" style="max-width: 100%; height: auto; display: block; margin: 0 auto;">';
-            
-            $mobile_img_id = isset($scb['image_mobile']) ? $scb['image_mobile'] : '';
-            $img_html = '';
-            if ($mobile_img_id) {
-                $mobile_url = wp_get_attachment_url($mobile_img_id);
-                $img_html .= '<picture>';
-                $img_html .= '<source media="(max-width: 768px)" srcset="' . esc_url($mobile_url) . '">';
-                $img_html .= $desktop_img;
-                $img_html .= '</picture>';
-            } else {
-                $img_html = $desktop_img;
-            }
+        // Preparar Estáticos
+        $static_desktop = [
+            'type' => $scb['type'] ?? 'image',
+            'image' => $scb['image'] ?? '',
+            'url' => $scb['url'] ?? '',
+            'html' => $scb['html'] ?? ''
+        ];
+        $static_mobile = [
+            'type' => $scb['type_mobile'] ?? 'image',
+            'image' => $scb['image_mobile'] ?? '',
+            'url' => $scb['url_mobile'] ?? '',
+            'html' => $scb['html_mobile'] ?? ''
+        ];
 
-            return sprintf(
-                '<div class="fcm-cta-container fcm-shortcode-cta" style="margin: 20px 0; text-align: center;">
-                    <a href="%s" target="_blank" rel="noopener noreferrer" style="display: inline-block;">%s</a>
-                </div>',
-                esc_url($scb['url']),
-                $img_html
-            );
-        } else {
-            return '<div class="fcm-cta-container fcm-shortcode-cta" style="margin: 20px 0;">' . do_shortcode($scb['html']) . '</div>';
+        // Randomizados
+        $random_desktop = $scb['random_desktop'] ?? [];
+        $random_mobile = $scb['random_mobile'] ?? [];
+
+        // Escolher
+        $picked_desktop = $this->get_random_banner($random_desktop, $static_desktop);
+        $picked_mobile = $this->get_random_banner($random_mobile, $static_mobile);
+
+        // Fallback Mobile
+        if (!$picked_mobile && $this->is_banner_valid($static_desktop)) {
+            $picked_mobile = $static_desktop;
         }
+
+        if (!$picked_desktop && !$picked_mobile) return '';
+
+        $html_desktop = '';
+        $html_mobile = '';
+
+        if ($picked_desktop) {
+            if ($picked_desktop['type'] === 'image') {
+                $img_url = wp_get_attachment_url($picked_desktop['image']);
+                $alt = get_post_meta($picked_desktop['image'], '_wp_attachment_image_alt', true);
+                $url = !empty($picked_desktop['url']) ? $picked_desktop['url'] : '#';
+                $html_desktop = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer"><img src="%s" alt="%s" style="max-width:100%%; height:auto; display:block; margin:0 auto;"></a>', esc_url($url), esc_url($img_url), esc_attr($alt));
+            } else {
+                $html_desktop = do_shortcode($picked_desktop['html'] ?? '');
+            }
+        }
+
+        if ($picked_mobile) {
+            if ($picked_mobile['type'] === 'image') {
+                $img_url = wp_get_attachment_url($picked_mobile['image']);
+                $alt = get_post_meta($picked_mobile['image'], '_wp_attachment_image_alt', true);
+                $url = !empty($picked_mobile['url']) ? $picked_mobile['url'] : '#';
+                $html_mobile = sprintf('<a href="%s" target="_blank" rel="noopener noreferrer"><img src="%s" alt="%s" style="max-width:100%%; height:auto; display:block; margin:0 auto;"></a>', esc_url($url), esc_url($img_url), esc_attr($alt));
+            } else {
+                $html_mobile = do_shortcode($picked_mobile['html'] ?? '');
+            }
+        }
+
+        $out = '<div class="fcm-cta-container fcm-shortcode-cta" style="margin: 20px 0; text-align: center;">';
+        if ($html_desktop === $html_mobile) {
+            $out .= $html_desktop;
+        } else {
+            if (!empty($html_desktop)) $out .= '<div class="fcm-desktop-only">' . $html_desktop . '</div>';
+            if (!empty($html_mobile)) $out .= '<div class="fcm-mobile-only">' . $html_mobile . '</div>';
+            $out .= '<style>
+                @media (max-width: 768px) { .fcm-desktop-only { display: none !important; } .fcm-mobile-only { display: block !important; } }
+                @media (min-width: 769px) { .fcm-desktop-only { display: block !important; } .fcm-mobile-only { display: none !important; } }
+            </style>';
+        }
+        $out .= '</div>';
+        return $out;
     }
 
 
