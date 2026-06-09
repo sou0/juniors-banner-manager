@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Funnel CTA Manager Pro
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 2.9
+ * Version: 3.0
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -82,42 +82,45 @@ class FunnelCTAManager {
         $title = $args['title'];
         $is_static = $args['is_static'] ?? false;
         $target_class = $args['target_class'] ?? ('fcm-fields-' . uniqid());
+        $id_prefix = $args['id_prefix'] ?? ''; // Novo parâmetro para IDs
 
         ob_start();
         ?>
-        <div class="fcm-banner-box <?php echo $is_static ? 'fcm-static-box' : 'fcm-random-box'; ?>" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative;">
+        <div class="fcm-banner-box <?php echo $is_static ? 'fcm-static-box' : 'fcm-random-box'; ?>" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 420px; justify-content: flex-start;">
             <?php if (!$is_static): ?>
                 <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover este banner">
                     <span class="dashicons dashicons-no-alt"></span>
                 </button>
             <?php endif; ?>
             
-            <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px;"><?php echo esc_html($title); ?></h3>
+            <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px; min-height: 45px; display: flex; align-items: center;"><?php echo esc_html($title); ?></h3>
             
             <div style="margin-bottom: 15px;">
                 <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Banner:</label>
-                <select name="<?php echo esc_attr($type_name); ?>" class="fcm-type-selector" data-target=".<?php echo esc_attr($target_class); ?>" style="width:100%;">
+                <select name="<?php echo esc_attr($type_name); ?>" id="<?php echo $id_prefix ? esc_attr($id_prefix . '_type') : ''; ?>" class="fcm-type-selector" data-target=".<?php echo esc_attr($target_class); ?>" style="width:100%;">
                     <option value="image" <?php selected($type, 'image'); ?>>Imagem</option>
                     <option value="html" <?php selected($type, 'html'); ?>>HTML / Shortcode</option>
                 </select>
             </div>
 
-            <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-image" style="display: <?php echo $type === 'image' ? 'block' : 'none'; ?>;">
-                <div class="fcm-upload-wrapper">
-                    <img src="<?php echo esc_url($img_url); ?>" style="max-width:100%; display:<?php echo $img_url ? 'block' : 'none'; ?>; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
-                    <input type="hidden" name="<?php echo esc_attr($image_name); ?>" value="<?php echo esc_attr($img_id); ?>" class="fcm-img-id">
-                    <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
-                    <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+            <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-image" style="display: <?php echo $type === 'image' ? 'block' : 'none'; ?>; flex-grow: 1;">
+                <div class="fcm-upload-wrapper" style="display: flex; flex-direction: column;">
+                    <img src="<?php echo esc_url($img_url); ?>" id="<?php echo $id_prefix ? esc_attr($id_prefix . '_preview') : ''; ?>" style="width:100%; height:180px; object-fit:contain; background:#f0f0f0; display:<?php echo $img_url ? 'block' : 'none'; ?>; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
+                    <input type="hidden" name="<?php echo esc_attr($image_name); ?>" id="<?php echo $id_prefix ? esc_attr($id_prefix) : ''; ?>" value="<?php echo esc_attr($img_id); ?>" class="fcm-img-id">
+                    <div>
+                        <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
+                        <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                    </div>
                 </div>
                 <div style="margin-top: 15px;">
                     <label style="display:block; font-weight:600;">Link de Destino:</label>
-                    <input type="url" name="<?php echo esc_attr($url_name); ?>" value="<?php echo esc_url($url); ?>" style="width:100%;" placeholder="<?php echo $is_static ? 'https://exemplo.com' : 'Vazio = Usar link do banner estático'; ?>">
+                    <input type="url" name="<?php echo esc_attr($url_name); ?>" id="<?php echo $id_prefix ? esc_attr($id_prefix . '_url') : ''; ?>" value="<?php echo esc_url($url); ?>" style="width:100%;" placeholder="<?php echo $is_static ? 'https://exemplo.com' : 'Vazio = Usar link do banner estático'; ?>">
                 </div>
             </div>
 
-            <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-html" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>;">
+            <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-html" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>; flex-grow: 1;">
                 <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
-                <textarea name="<?php echo esc_attr($html_name); ?>" rows="8" style="width:100%; font-family:monospace;"><?php echo esc_textarea($html); ?></textarea>
+                <textarea name="<?php echo esc_attr($html_name); ?>" id="<?php echo $id_prefix ? esc_attr($id_prefix . '_html') : ''; ?>" rows="8" style="width:100%; font-family:monospace; height: 250px;"><?php echo esc_textarea($html); ?></textarea>
             </div>
         </div>
         <?php
@@ -463,28 +466,6 @@ class FunnelCTAManager {
                     <div id="tab-<?php echo esc_attr($key); ?>" class="tab-content" style="display: <?php echo $active_tab === $key ? 'block' : 'none'; ?>;">
                         <h2 style="font-size: 1.3em; margin-top:0;">Configurar: <?php echo esc_html($label); ?></h2>
                         <hr style="margin: 20px 0;">
-                        
-                        <?php if ($key === 'global'): ?>
-                            <table class="form-table">
-                                <tr>
-                                    <th scope="row"><label for="fcm_global_allow_multiple"><strong>Exibição Simultânea</strong></label></th>
-                                    <td>
-                                        <label>
-                                            <input type="checkbox" name="fcm_settings[global_allow_multiple]" id="fcm_global_allow_multiple" value="1" <?php checked(!empty($options['global_allow_multiple'])); ?>>
-                                            Permitir que este banner apareça ao mesmo tempo que banners de Funil/Padrão/Override (desde que em posições diferentes).
-                                        </label>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <th scope="row"><label><strong>Links Excluídos (Bloqueio)</strong></label></th>
-                                    <td>
-                                        <textarea name="fcm_settings[global_excluded_targets]" rows="4" class="large-text" placeholder="/url-do-post-1/&#10;/url-do-post-2/"><?php echo esc_textarea(isset($options['global_excluded_targets']) ? $options['global_excluded_targets'] : ''); ?></textarea>
-                                        <p class="description">Cole as URLs dos posts onde este banner Global <strong>NÃO</strong> deve aparecer (uma por linha).</p>
-                                    </td>
-                                </tr>
-                            </table>
-                            <hr style="margin: 20px 0;">
-                        <?php endif; ?>
 
                         <?php if ($key === 'padrao'): ?>
                             <table class="form-table">
@@ -596,15 +577,24 @@ class FunnelCTAManager {
                         </div>
 
                         <table class="form-table">
+                            <?php if ($key === 'global'): ?>
                             <tr>
-                                <th scope="row"><label><strong>Exibição Simultânea</strong></label></th>
+                                <th scope="row"><label for="fcm_global_allow_multiple"><strong>Exibição Simultânea</strong></label></th>
                                 <td>
                                     <label style="font-weight: 600;">
-                                        <input type="checkbox" name="cb_allow_multiple" id="cb_allow_multiple" value="1">
-                                        Permitir múltiplos banners nesta página (desde que posições diferentes). Se desmarcado, ele bloqueia todos os outros níveis (Funil, Padrão, Global).
+                                        <input type="checkbox" name="fcm_settings[global_allow_multiple]" id="fcm_global_allow_multiple" value="1" <?php checked(!empty($options['global_allow_multiple'])); ?>>
+                                        Permitir que este banner apareça ao mesmo tempo que banners de Funil/Padrão/Override (desde que em posições diferentes).
                                     </label>
                                 </td>
                             </tr>
+                            <tr>
+                                <th scope="row"><label><strong>Links Excluídos (Bloqueio)</strong></label></th>
+                                <td>
+                                    <textarea name="fcm_settings[global_excluded_targets]" rows="4" class="large-text" placeholder="/url-do-post-1/&#10;/url-do-post-2/"><?php echo esc_textarea(isset($options['global_excluded_targets']) ? $options['global_excluded_targets'] : ''); ?></textarea>
+                                    <p class="description">Cole as URLs dos posts onde este banner Global <strong>NÃO</strong> deve aparecer (uma por linha).</p>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
                             <tr>
                                 <th scope="row"><label><strong>Posição de Injeção no Texto</strong></label></th>
                                 <td>
@@ -814,7 +804,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'cb_image',
                                                     'url_name' => 'cb_url',
                                                     'html_name' => 'cb_html',
-                                                    'target_class' => 'cb-desktop-fields'
+                                                    'target_class' => 'cb-desktop-fields',
+                                                    'id_prefix' => 'cb_image'
                                                 ]); 
                                                 ?>
                                             </div>
@@ -837,7 +828,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'cb_image_mobile',
                                                     'url_name' => 'cb_url_mobile',
                                                     'html_name' => 'cb_html_mobile',
-                                                    'target_class' => 'cb-mobile-fields'
+                                                    'target_class' => 'cb-mobile-fields',
+                                                    'id_prefix' => 'cb_image_mobile'
                                                 ]); 
                                                 ?>
                                             </div>
@@ -1017,7 +1009,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'scb_image',
                                                     'url_name' => 'scb_url',
                                                     'html_name' => 'scb_html',
-                                                    'target_class' => 'scb-desktop-fields'
+                                                    'target_class' => 'scb-desktop-fields',
+                                                    'id_prefix' => 'scb_image'
                                                 ]); 
                                                 ?>
                                             </div>
@@ -1040,7 +1033,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'scb_image_mobile',
                                                     'url_name' => 'scb_url_mobile',
                                                     'html_name' => 'scb_html_mobile',
-                                                    'target_class' => 'scb-mobile-fields'
+                                                    'target_class' => 'scb-mobile-fields',
+                                                    'id_prefix' => 'scb_image_mobile'
                                                 ]); 
                                                 ?>
                                             </div>
@@ -1189,6 +1183,10 @@ class FunnelCTAManager {
         <style>
             #fcm-search-results li { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #eee; }
             #fcm-search-results li:hover { background: #f0f0f1; }
+            .fcm-banner-column { display: flex; flex-direction: column; }
+            .fcm-banner-column .fcm-random-container { display: flex; flex-direction: column; flex-grow: 1; }
+            /* Garantir que as caixas estáticas fiquem alinhadas no topo se houver diferença de conteúdo */
+            .fcm-static-box { flex-shrink: 0; }
         </style>
         <?php
     }
@@ -1275,14 +1273,16 @@ class FunnelCTAManager {
                 var btn = $(this);
                 var uploader = wp.media({title: 'Escolher Imagem', button: {text: 'Usar Imagem'}, multiple: false}).on('select', function() {
                     var attachment = uploader.state().get('selection').first().toJSON();
-                    btn.siblings('.fcm-preview').attr('src', attachment.url).show();
-                    btn.siblings('.fcm-img-id').val(attachment.id);
+                    var wrapper = btn.closest('.fcm-upload-wrapper');
+                    wrapper.find('.fcm-preview').attr('src', attachment.url).show();
+                    wrapper.find('.fcm-img-id').val(attachment.id);
                 }).open();
             });
 
             $(document).on('click', '.fcm-remove-btn', function(){
-                $(this).siblings('.fcm-preview').hide();
-                $(this).siblings('.fcm-img-id').val('');
+                var wrapper = $(this).closest('.fcm-upload-wrapper');
+                wrapper.find('.fcm-preview').hide();
+                wrapper.find('.fcm-img-id').val('');
             });
 
             // Add Randomized Banner
@@ -1303,11 +1303,11 @@ class FunnelCTAManager {
                 }
 
                 var html = `
-                <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative;">
+                <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 420px; justify-content: flex-start;">
                     <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover este banner">
                         <span class="dashicons dashicons-no-alt"></span>
                     </button>
-                    <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px;">${colType.charAt(0).toUpperCase() + colType.slice(1)} Randomizado</h3>
+                    <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px; min-height: 45px; display: flex; align-items: center;">${colType.charAt(0).toUpperCase() + colType.slice(1)} Randomizado</h3>
                     <div style="margin-bottom: 15px;">
                         <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Banner:</label>
                         <select name="${namePrefix}[type]" class="fcm-type-selector" data-target=".${targetClass}" style="width:100%;">
@@ -1315,21 +1315,23 @@ class FunnelCTAManager {
                             <option value="html">HTML / Shortcode</option>
                         </select>
                     </div>
-                    <div class="${targetClass} fcm-type-field-image" style="display: block;">
-                        <div class="fcm-upload-wrapper">
-                            <img src="" style="max-width:100%; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
+                    <div class="${targetClass} fcm-type-field-image" style="display: block; flex-grow: 1;">
+                        <div class="fcm-upload-wrapper" style="display: flex; flex-direction: column;">
+                            <img src="" style="width:100%; height:180px; object-fit:contain; background:#f0f0f0; display:none; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
                             <input type="hidden" name="${namePrefix}[image]" value="" class="fcm-img-id">
-                            <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
-                            <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                            <div>
+                                <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
+                                <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                            </div>
                         </div>
                         <div style="margin-top: 15px;">
                             <label style="display:block; font-weight:600;">Link de Destino:</label>
                             <input type="url" name="${namePrefix}[url]" value="" style="width:100%;" placeholder="Vazio = Usar link do banner estático">
                         </div>
                     </div>
-                    <div class="${targetClass} fcm-type-field-html" style="display: none;">
+                    <div class="${targetClass} fcm-type-field-html" style="display: none; flex-grow: 1;">
                         <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
-                        <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace;"></textarea>
+                        <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace; height: 250px;"></textarea>
                     </div>
                 </div>`;
                 
@@ -1351,11 +1353,11 @@ class FunnelCTAManager {
                     var namePrefix = key + '_random_' + colType + '[' + index + ']';
                     
                     var html = `
-                    <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative;">
+                    <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 420px; justify-content: flex-start;">
                         <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover">
                             <span class="dashicons dashicons-no-alt"></span>
                         </button>
-                        <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px;">${colType.charAt(0).toUpperCase() + colType.slice(1)} Randomizado</h3>
+                        <h3 style="margin-top: 0; border-bottom: 2px solid #2271b1; padding-bottom: 10px; min-height: 45px; display: flex; align-items: center;">${colType.charAt(0).toUpperCase() + colType.slice(1)} Randomizado</h3>
                         <div style="margin-bottom: 15px;">
                             <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipo de Banner:</label>
                             <select name="${namePrefix}[type]" class="fcm-type-selector" data-target=".${targetClass}" style="width:100%;">
@@ -1363,21 +1365,23 @@ class FunnelCTAManager {
                                 <option value="html" ${rb.type === 'html' ? 'selected' : ''}>HTML / Shortcode</option>
                             </select>
                         </div>
-                        <div class="${targetClass} fcm-type-field-image" style="display: ${rb.type === 'image' ? 'block' : 'none'};">
-                            <div class="fcm-upload-wrapper">
-                                <img src="${rb.image_url || ''}" style="max-width:100%; display:${rb.image_url ? 'block' : 'none'}; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
+                    <div class="${targetClass} fcm-type-field-image" style="display: ${rb.type === 'image' ? 'block' : 'none'}; flex-grow: 1;">
+                            <div class="fcm-upload-wrapper" style="display: flex; flex-direction: column;">
+                                <img src="${rb.image_url || ''}" style="width:100%; height:180px; object-fit:contain; background:#f0f0f0; display:${rb.image_url ? 'block' : 'none'}; margin-bottom:15px; border: 1px dashed #ccc; border-radius: 4px;" class="fcm-preview">
                                 <input type="hidden" name="${namePrefix}[image]" value="${rb.image || ''}" class="fcm-img-id">
-                                <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
-                                <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                                <div>
+                                    <button type="button" class="button button-secondary fcm-upload-btn">Escolher Imagem</button>
+                                    <button type="button" class="button fcm-remove-btn" style="color:#b32d2e;">Remover</button>
+                                </div>
                             </div>
                             <div style="margin-top: 15px;">
                                 <label style="display:block; font-weight:600;">Link de Destino:</label>
                                 <input type="url" name="${namePrefix}[url]" value="${rb.url || ''}" style="width:100%;" placeholder="Vazio = Usar link do banner estático">
                             </div>
                         </div>
-                        <div class="${targetClass} fcm-type-field-html" style="display: ${rb.type === 'html' ? 'block' : 'none'};">
+                        <div class="${targetClass} fcm-type-field-html" style="display: ${rb.type === 'html' ? 'block' : 'none'}; flex-grow: 1;">
                             <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
-                            <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace;">${rb.html || ''}</textarea>
+                            <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace; height: 250px;">${rb.html || ''}</textarea>
                         </div>
                     </div>`;
                     container.append(html);
@@ -1420,7 +1424,7 @@ class FunnelCTAManager {
                 switchTab('#tab-custom-edit');
             });
 
-            $('.btn-edit-custom-banner').click(function(e){
+            $(document).on('click', '.btn-edit-custom-banner', function(e){
                 e.preventDefault();
                 $('#custom-edit-title').text('Editar Banner de Override');
                 var data = $(this).data('banner');
@@ -1925,9 +1929,9 @@ class FunnelCTAManager {
                     
                     if (empty($cb['allow_multiple'])) {
                         $override_blocks_others = true;
+                        break; // Só para se o banner explicitamente bloquear outros
                     }
                 }
-                break;
             }
         }
 
@@ -2019,15 +2023,29 @@ class FunnelCTAManager {
             var mainContainer = null;
             var maxP = 0;
 
-            for (var i = 0; i < selectors.length; i++) {
-                var els = document.querySelectorAll(selectors[i]);
-                els.forEach(function(el) {
-                    var pList = el.querySelectorAll('p');
-                    if (pList.length > maxP) {
-                        maxP = pList.length;
+            // 1. Prioridade absoluta para Selectores Customizados
+            if (customSelectors.length > 0) {
+                for (var i = 0; i < customSelectors.length; i++) {
+                    var el = document.querySelector(customSelectors[i]);
+                    if (el) {
                         mainContainer = el;
+                        break; // Se achou um customizado, usa ele imediatamente
                     }
-                });
+                }
+            }
+
+            // 2. Fallback para Selectores Padrão se não achou customizado
+            if (!mainContainer) {
+                for (var i = 0; i < selectors.length; i++) {
+                    var els = document.querySelectorAll(selectors[i]);
+                    els.forEach(function(el) {
+                        var pList = el.querySelectorAll('p');
+                        if (pList.length > maxP) {
+                            maxP = pList.length;
+                            mainContainer = el;
+                        }
+                    });
+                }
             }
 
             if (!mainContainer) return;
@@ -2047,7 +2065,14 @@ class FunnelCTAManager {
                 var bannerEl = div.firstElementChild || div;
 
                 if (b.pos === 'top') {
-                    mainContainer.insertBefore(bannerEl, mainContainer.firstChild);
+                    // Se houver um parágrafo, insere antes do primeiro parágrafo
+                    // Se não houver, insere no início do container
+                    var firstP = mainContainer.querySelector('p');
+                    if (firstP) {
+                        firstP.parentNode.insertBefore(bannerEl, firstP);
+                    } else {
+                        mainContainer.insertBefore(bannerEl, mainContainer.firstChild);
+                    }
                     return;
                 }
                 if (b.pos === 'bottom') {
