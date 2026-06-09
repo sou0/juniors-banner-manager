@@ -709,49 +709,93 @@ class FunnelCTAManager {
                 <div id="tab-custom-list" class="tab-content" style="display: <?php echo $active_tab === 'custom-list' ? 'block' : 'none'; ?>;">
                     <div style="display:flex; justify-content: space-between; align-items: center;">
                         <h2 style="font-size: 1.3em; margin:0;">Banners de Override (Substituição)</h2>
-                        <a href="#" class="button button-primary" id="btn-create-custom-banner">Criar Novo Override</a>
+                        <div>
+                            <button type="button" id="btn-export-overrides" class="button">Exportar CSV</button>
+                            <button type="button" id="btn-import-overrides-trigger" class="button">Importar CSV</button>
+                            <input type="file" id="fcm-csv-overrides" accept=".csv" style="display:none;">
+                            <a href="#" class="button button-primary" id="btn-create-custom-banner">Criar Novo Override</a>
+                        </div>
                     </div>
-                    <p class="description">Banners personalizados que substituem automaticamente os CTAs do funil em URLs específicas.</p>
+                    <p class="description">Esta lista exibe todos os links que estão sendo sobrepostos por um Banner de Override. Banners sem links também aparecem aqui.</p>
                     <hr style="margin: 20px 0;">
                     
-                    <table class="wp-list-table widefat fixed striped">
-                        <thead>
-                            <tr>
-                                <th>Nome do Banner</th>
-                                <th>Tipo</th>
-                                <th>Status / Cronograma</th>
-                                <th>Posição</th>
-                                <th>Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($custom_banners)): ?>
-                                <tr><td colspan="5">Nenhum banner especial criado.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($custom_banners as $cb): 
-                                    $type_label = $cb['type'] === 'image' ? 'Imagem' : 'HTML/Elementor';
-                                    $pos_label = 'Meio';
-                                    if(isset($cb['position'])) {
-                                        if($cb['position'] === 'top') $pos_label = 'Início';
-                                        elseif($cb['position'] === 'bottom') $pos_label = 'Fim';
-                                        elseif($cb['position'] === 'after_p') $pos_label = 'Após P('.$cb['paragraph'].')';
-                                    }
-                                ?>
+                    <form method="post" action="<?php echo admin_url('admin.php?page=funnel-cta&tab=custom-list'); ?>">
+                        <?php wp_nonce_field('fcm_bulk_override_nonce', 'fcm_bulk_override_nonce'); ?>
+                        <div class="tablenav top">
+                            <div class="alignleft actions">
+                                <select name="fcm_bulk_action_override">
+                                    <option value="-1">Ações em massa</option>
+                                    <option value="delete_links">Remover Links Selecionados</option>
+                                </select>
+                                <input type="submit" class="button action" value="Aplicar">
+                            </div>
+                        </div>
+                        <table class="wp-list-table widefat fixed striped" id="table-overrides">
+                            <thead>
                                 <tr>
-                                    <td><strong><?php echo esc_html($cb['name']); ?></strong><br><small>ID: <?php echo esc_html($cb['id']); ?></small></td>
-                                    <td><?php echo esc_html($type_label); ?></td>
-                                    <td><?php echo $this->get_banner_status_html($cb, '', true); ?></td>
-                                    <td><?php echo esc_html($pos_label); ?></td>
-                                    <td>
-                                        <a href="#" class="button button-small btn-edit-custom-banner" 
-                                           data-banner='<?php echo esc_attr(json_encode($this->enrich_banner_data($cb))); ?>'>Editar</a>
-                                        <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=funnel-cta&tab=custom-list&fcm_del_cb=' . $cb['id']), 'del_cb_' . $cb['id']); ?>" class="button button-small" style="color:#b32d2e; border-color:#b32d2e;" onclick="return confirm('Tem certeza?');">Excluir</a>
-                                    </td>
+                                    <td class="manage-column column-cb check-column"><input type="checkbox" class="fcm-select-all" data-target=".fcm-override-cb"></td>
+                                    <th>Título do Post / Link Afetado</th>
+                                    <th>Banner Vinculado</th>
+                                    <th>Posição Padrão</th>
+                                    <th>Ações</th>
                                 </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                <?php 
+                                $has_links = false;
+                                foreach ($custom_banners as $cb): 
+                                    $targets = array_filter(array_map('trim', explode("\n", $cb['targets'])));
+                                    if (empty($targets)):
+                                ?>
+                                        <tr>
+                                            <th scope="row" class="check-column"></th>
+                                            <td><em>(Sem links atribuídos)</em></td>
+                                            <td><strong><?php echo esc_html($cb['name']); ?></strong></td>
+                                            <td>-</td>
+                                            <td>
+                                                <a href="#" class="button button-small btn-edit-custom-banner" data-banner='<?php echo esc_attr(json_encode($this->enrich_banner_data($cb))); ?>'>Editar Banner</a>
+                                                <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=funnel-cta&tab=custom-list&fcm_del_cb=' . $cb['id']), 'del_cb_' . $cb['id']); ?>" class="button button-small" style="color:#b32d2e; border-color:#b32d2e;" onclick="return confirm('Excluir este banner inteiro?');">Excluir Banner</a>
+                                            </td>
+                                        </tr>
+                                <?php 
+                                        $has_links = true;
+                                        continue;
+                                    endif;
+
+                                    foreach ($targets as $idx => $url): 
+                                        $has_links = true;
+                                        $post_id = url_to_postid($url);
+                                        $title = $post_id ? get_the_title($post_id) : 'URL Externa / Arquivo';
+                                        $edit_link = $post_id ? get_edit_post_link($post_id) : '';
+                                ?>
+                                    <tr>
+                                        <th scope="row" class="check-column">
+                                            <input type="checkbox" name="fcm_override_links[]" class="fcm-override-cb" value="<?php echo esc_attr($cb['id'] . '|' . $idx); ?>">
+                                        </th>
+                                        <td>
+                                            <strong><?php echo esc_html($title); ?></strong><br>
+                                            <small class="fcm-row-url"><a href="<?php echo esc_url($url); ?>" target="_blank"><?php echo esc_url($url); ?></a></small>
+                                        </td>
+                                        <td class="fcm-row-banner"><strong><?php echo esc_html($cb['name']); ?></strong></td>
+                                        <td><?php echo esc_html($cb['position'] ?? 'middle'); ?></td>
+                                        <td>
+                                            <a href="#" class="button button-small btn-edit-custom-banner" data-banner='<?php echo esc_attr(json_encode($this->enrich_banner_data($cb))); ?>'>Editar Banner</a>
+                                            <?php if ($edit_link): ?>
+                                                <a href="<?php echo esc_url($edit_link); ?>" class="button button-small" target="_blank">Editar Post (Posição)</a>
+                                            <?php endif; ?>
+                                            <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=funnel-cta&tab=custom-list&fcm_del_link=' . $cb['id'] . '&idx=' . $idx), 'del_link_' . $cb['id']); ?>" class="button button-small" style="color:#b32d2e; border-color:#b32d2e;" onclick="return confirm('Remover este link do banner?');">Remover Link</a>
+                                        </td>
+                                    </tr>
+                                <?php 
+                                    endforeach;
+                                endforeach; 
+                                if (!$has_links): 
+                                ?>
+                                    <tr><td colspan="5">Nenhum banner ou link configurado.</td></tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </form>
                 </div>
 
                 <!-- TAB: Monitor de Conflitos -->
