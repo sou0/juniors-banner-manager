@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: Funnel CTA Manager Pro
+ * Plugin Name: Junior's banner manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
  * Version: 3.1
  * Author: junior
@@ -39,6 +39,7 @@ class FunnelCTAManager {
         add_action('wp_footer', [$this, 'inject_cta_via_js']);
 
         add_action('wp_ajax_fcm_import_classified', [$this, 'handle_classified_import']);
+        add_action('wp_ajax_fcm_get_post_by_url', [$this, 'handle_get_post_by_url']);
         add_action('wp_ajax_fcm_search_posts', [$this, 'handle_post_search']);
         add_action('wp_ajax_fcm_analyze_conflicts', [$this, 'handle_conflict_analysis']);
         add_action('wp_ajax_fcm_save_post_stage', [$this, 'handle_save_post_stage']);
@@ -225,7 +226,15 @@ class FunnelCTAManager {
        1. CORE ADMIN & MENUS
     ---------------------------------------------------------------------------- */
     public function create_menu() {
-        add_menu_page('Funnel CTA', 'Funnel CTA', 'manage_options', 'funnel-cta', [$this, 'render_admin_page'], 'dashicons-filter', 30);
+        add_menu_page("Junior's banner manager", "Junior's banner", 'manage_options', 'funnel-cta', [$this, 'render_admin_page'], 'dashicons-filter', 30);
+        add_submenu_page('funnel-cta', 'Visão Geral', 'Visão Geral', 'manage_options', 'funnel-cta', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Lista de Funil', 'Lista de Funil', 'manage_options', 'fcm-list', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Banners de Override', 'Banners de Override', 'manage_options', 'fcm-custom-list', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Banners Shortcode', 'Banners Shortcode', 'manage_options', 'fcm-shortcode-list', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Topo de Funil', 'Topo de Funil', 'manage_options', 'fcm-topo', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Meio de Funil', 'Meio de Funil', 'manage_options', 'fcm-meio', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Fundo de Funil', 'Fundo de Funil', 'manage_options', 'fcm-fundo', [$this, 'render_admin_page']);
+        add_submenu_page('funnel-cta', 'Imagem Padrão', 'Imagem Padrão', 'manage_options', 'fcm-padrao', [$this, 'render_admin_page']);
     }
 
     public function handle_custom_banner_save() {
@@ -274,6 +283,8 @@ class FunnelCTAManager {
                 'html_mobile' => isset($_POST['cb_html_mobile']) ? wp_unslash($_POST['cb_html_mobile']) : '', 
                 'random_desktop' => $random_desktop,
                 'random_mobile' => $random_mobile,
+                'desktop_disabled' => isset($_POST['cb_desktop_disabled']) ? 1 : 0,
+                'mobile_disabled' => isset($_POST['cb_mobile_disabled']) ? 1 : 0,
                 'schedule' => isset($_POST['cb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['cb_start']),
                 'end' => sanitize_text_field($_POST['cb_end']),
@@ -346,6 +357,8 @@ class FunnelCTAManager {
                 'html_mobile' => isset($_POST['scb_html_mobile']) ? wp_unslash($_POST['scb_html_mobile']) : '', 
                 'random_desktop' => $random_desktop,
                 'random_mobile' => $random_mobile,
+                'desktop_disabled' => isset($_POST['scb_desktop_disabled']) ? 1 : 0,
+                'mobile_disabled' => isset($_POST['scb_mobile_disabled']) ? 1 : 0,
                 'schedule' => isset($_POST['scb_schedule']) ? 1 : 0,
                 'start' => sanitize_text_field($_POST['scb_start']),
                 'end' => sanitize_text_field($_POST['scb_end']),
@@ -415,28 +428,45 @@ class FunnelCTAManager {
             'padrao' => 'Imagem Padrão'
         ];
 
+        $current_page = isset($_GET['page']) ? $_GET['page'] : '';
         $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'dashboard';
+        $slug_map = [
+            'fcm-list' => 'list',
+            'fcm-custom-list' => 'custom-list',
+            'fcm-shortcode-list' => 'shortcode-list',
+            'fcm-topo' => 'topo',
+            'fcm-meio' => 'meio',
+            'fcm-fundo' => 'fundo',
+            'fcm-padrao' => 'padrao'
+        ];
+        if (isset($slug_map[$current_page])) {
+            $active_tab = $slug_map[$current_page];
+        }
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Gerenciador de CTAs de Funil <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v3.1</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v3.1</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
 
             <h2 class="nav-tab-wrapper fcm-tabs" style="margin-bottom: 0;">
                 <a href="#tab-dashboard" class="nav-tab <?php echo $active_tab === 'dashboard' ? 'nav-tab-active' : ''; ?>">Visão Geral</a>
-                <?php foreach ($stages as $k => $l): ?>
-                    <a href="#tab-<?php echo esc_attr($k); ?>" class="nav-tab <?php echo $active_tab === $k ? 'nav-tab-active' : ''; ?>"><?php echo esc_html($l); ?></a>
-                <?php endforeach; ?>
+                <a href="#tab-global" class="nav-tab <?php echo $active_tab === 'global' ? 'nav-tab-active' : ''; ?>">Banner Global</a>
+                
                 <a href="#tab-custom-list" class="nav-tab <?php echo $active_tab === 'custom-list' ? 'nav-tab-active' : ''; ?>" style="background: #e3f2fd; color: #0c5460;">Banners de Override</a>
                 <a href="#tab-custom-edit" class="nav-tab fcm-hidden-tab <?php echo $active_tab === 'custom-edit' ? 'nav-tab-active' : ''; ?>" style="display: <?php echo $active_tab === 'custom-edit' ? 'inline-block' : 'none'; ?>;">Editor de Override</a>
                 
                 <a href="#tab-shortcode-list" class="nav-tab <?php echo $active_tab === 'shortcode-list' ? 'nav-tab-active' : ''; ?>" style="background: #e8f5e9; color: #004d40;">Banners Shortcode</a>
                 <a href="#tab-shortcode-edit" class="nav-tab fcm-hidden-tab <?php echo $active_tab === 'shortcode-edit' ? 'nav-tab-active' : ''; ?>" style="display: <?php echo $active_tab === 'shortcode-edit' ? 'inline-block' : 'none'; ?>;">Editor de Shortcode</a>
                 
-                <a href="#tab-list" class="nav-tab <?php echo $active_tab === 'list' ? 'nav-tab-active' : ''; ?>">Posts Classificados</a>
+                <a href="#tab-list" class="nav-tab <?php echo $active_tab === 'list' ? 'nav-tab-active' : ''; ?>">Lista de Funil</a>
                 <a href="#tab-logs" class="nav-tab <?php echo $active_tab === 'logs' ? 'nav-tab-active' : ''; ?>"><span class="dashicons dashicons-search" style="margin-top:4px;"></span> Monitor de Conflitos</a>
                 <a href="#tab-advanced" class="nav-tab <?php echo $active_tab === 'advanced' ? 'nav-tab-active' : ''; ?>" style="color: #666;"><span class="dashicons dashicons-admin-generic" style="margin-top:4px;"></span> Avançado</a>
+
+                <?php // Abas ocultas mas acessíveis via hash ou submenu ?>
+                <?php foreach (['topo', 'meio', 'fundo', 'padrao'] as $hidden_k): ?>
+                    <a href="#tab-<?php echo $hidden_k; ?>" class="nav-tab fcm-hidden-tab <?php echo $active_tab === $hidden_k ? 'nav-tab-active' : ''; ?>" style="display:none;"></a>
+                <?php endforeach; ?>
             </h2>
 
             <div class="fcm-content-wrapper" style="background: #fff; padding: 20px; border: 1px solid #ccc; border-top: none; min-height: 500px;">
@@ -519,7 +549,13 @@ class FunnelCTAManager {
 
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
                             <!-- Desktop Column -->
-                            <div class="fcm-banner-column" data-column="desktop" data-key="<?php echo esc_attr($key); ?>">
+                            <div class="fcm-banner-column <?php echo !empty($options[$key . '_desktop_disabled']) ? 'fcm-column-disabled' : ''; ?>" data-column="desktop" data-key="<?php echo esc_attr($key); ?>">
+                                <div class="fcm-disable-toggle-wrapper" style="background: #e2e2e2; padding: 10px; border-radius: 5px; text-align: center;">
+                                    <label style="font-weight: bold; cursor: pointer;">
+                                        <input type="checkbox" name="fcm_settings[<?php echo $key; ?>_desktop_disabled]" value="1" <?php checked(!empty($options[$key . '_desktop_disabled'])); ?> class="fcm-disable-column-toggle">
+                                        DESATIVAR DESKTOP
+                                    </label>
+                                </div>
                                 <?php 
                                 // Static Box
                                 echo $this->render_banner_config_box([
@@ -565,7 +601,13 @@ class FunnelCTAManager {
                             </div>
 
                             <!-- Mobile Column -->
-                            <div class="fcm-banner-column" data-column="mobile" data-key="<?php echo esc_attr($key); ?>">
+                            <div class="fcm-banner-column <?php echo !empty($options[$key . '_mobile_disabled']) ? 'fcm-column-disabled' : ''; ?>" data-column="mobile" data-key="<?php echo esc_attr($key); ?>">
+                                <div class="fcm-disable-toggle-wrapper" style="background: #e2e2e2; padding: 10px; border-radius: 5px; text-align: center;">
+                                    <label style="font-weight: bold; cursor: pointer;">
+                                        <input type="checkbox" name="fcm_settings[<?php echo $key; ?>_mobile_disabled]" value="1" <?php checked(!empty($options[$key . '_mobile_disabled'])); ?> class="fcm-disable-column-toggle">
+                                        DESATIVAR MOBILE
+                                    </label>
+                                </div>
                                 <?php 
                                 // Static Box
                                 echo $this->render_banner_config_box([
@@ -733,8 +775,8 @@ class FunnelCTAManager {
                     </table>
                 </div>
 
-                    <div id="fcm-main-submit-btn" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; display: <?php echo in_array($active_tab, array_merge(array_keys($stages), ['advanced', 'dashboard'])) ? 'block' : 'none'; ?>;">
-                        <?php submit_button('Salvar Configurações Globais', 'primary', 'submit', false); ?>
+                    <div id="fcm-main-submit-btn" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; display: <?php echo in_array($active_tab, array_merge(array_keys($stages), ['global', 'advanced', 'dashboard'])) ? 'block' : 'none'; ?>;">
+                        <?php submit_button('Salvar', 'primary', 'submit', false); ?>
                     </div>
                 </form>
                 <!-- END: MAIN OPTIONS FORM -->
@@ -833,6 +875,12 @@ class FunnelCTAManager {
                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                         <!-- Desktop Column -->
                                         <div class="fcm-banner-column" data-column="desktop" data-key="cb">
+                                            <div class="fcm-disable-toggle-wrapper" style="background: #e2e2e2; padding: 10px; border-radius: 5px; text-align: center;">
+                                                <label style="font-weight: bold; cursor: pointer;">
+                                                    <input type="checkbox" name="cb_desktop_disabled" id="cb_desktop_disabled" value="1" class="fcm-disable-column-toggle">
+                                                    DESATIVAR DESKTOP
+                                                </label>
+                                            </div>
                                             <div class="fcm-static-container">
                                                 <?php 
                                                 echo $this->render_banner_config_box([
@@ -857,6 +905,12 @@ class FunnelCTAManager {
 
                                         <!-- Mobile Column -->
                                         <div class="fcm-banner-column" data-column="mobile" data-key="cb">
+                                            <div class="fcm-disable-toggle-wrapper" style="background: #e2e2e2; padding: 10px; border-radius: 5px; text-align: center;">
+                                                <label style="font-weight: bold; cursor: pointer;">
+                                                    <input type="checkbox" name="cb_mobile_disabled" id="cb_mobile_disabled" value="1" class="fcm-disable-column-toggle">
+                                                    DESATIVAR MOBILE
+                                                </label>
+                                            </div>
                                             <div class="fcm-static-container">
                                                 <?php 
                                                 echo $this->render_banner_config_box([
@@ -942,10 +996,15 @@ class FunnelCTAManager {
                                 <td>
                                     <div style="background: #fff; border: 1px solid #ccd0d4; padding: 15px; border-radius: 4px;">
                                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                            <div style="position:relative;">
-                                                <input type="text" id="fcm-target-search" class="regular-text" placeholder="Pesquisar post por título ou URL...">
-                                                <span class="spinner" id="fcm-target-spinner" style="position:absolute; right:-30px; top:5px;"></span>
-                                                <ul id="fcm-target-results" style="display:none; position:absolute; left:0; right:0; background:#fff; border:1px solid #ccc; z-index:100; max-height:200px; overflow-y:auto; margin:0; padding:0; box-shadow:0 2px 4px rgba(0,0,0,0.1);"></ul>
+                                            <div style="display:flex; gap:10px; align-items:center;">
+                                                <div style="position:relative;">
+                                                    <input type="text" id="fcm-target-search" class="regular-text" placeholder="Pesquisar post por título...">
+                                                    <span class="spinner" id="fcm-target-spinner" style="position:absolute; right:-30px; top:5px;"></span>
+                                                    <ul id="fcm-target-results" style="display:none; position:absolute; left:0; right:0; background:#fff; border:1px solid #ccc; z-index:100; max-height:200px; overflow-y:auto; margin:0; padding:0; box-shadow:0 2px 4px rgba(0,0,0,0.1);"></ul>
+                                                </div>
+                                                <span style="color:#999;">ou</span>
+                                                <input type="url" id="fcm-manual-url" class="regular-text" placeholder="Link direto (https://...)" style="width:200px;">
+                                                <button type="button" id="btn-add-manual-url" class="button">Adicionar Link</button>
                                             </div>
                                             <div>
                                                 <button type="button" id="btn-export-targets" class="button"><span class="dashicons dashicons-download" style="margin-top:4px;"></span> Exportar CSV</button>
@@ -982,7 +1041,7 @@ class FunnelCTAManager {
                         </table>
 
                         <p class="submit">
-                            <input type="submit" name="submit_custom" class="button button-primary" value="Salvar Banner Especial">
+                            <input type="submit" name="submit_custom" class="button button-primary" value="Salvar">
                         </p>
                     </form>
                 </div>
@@ -1063,6 +1122,12 @@ class FunnelCTAManager {
                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                         <!-- Desktop Column -->
                                         <div class="fcm-banner-column" data-column="desktop" data-key="scb">
+                                            <div class="fcm-disable-toggle-wrapper" style="background: #e2e2e2; padding: 10px; border-radius: 5px; text-align: center;">
+                                                <label style="font-weight: bold; cursor: pointer;">
+                                                    <input type="checkbox" name="scb_desktop_disabled" id="scb_desktop_disabled" value="1" class="fcm-disable-column-toggle">
+                                                    DESATIVAR DESKTOP
+                                                </label>
+                                            </div>
                                             <div class="fcm-static-container">
                                                 <?php 
                                                 echo $this->render_banner_config_box([
@@ -1087,6 +1152,12 @@ class FunnelCTAManager {
 
                                         <!-- Mobile Column -->
                                         <div class="fcm-banner-column" data-column="mobile" data-key="scb">
+                                            <div class="fcm-disable-toggle-wrapper" style="background: #e2e2e2; padding: 10px; border-radius: 5px; text-align: center;">
+                                                <label style="font-weight: bold; cursor: pointer;">
+                                                    <input type="checkbox" name="scb_mobile_disabled" id="scb_mobile_disabled" value="1" class="fcm-disable-column-toggle">
+                                                    DESATIVAR MOBILE
+                                                </label>
+                                            </div>
                                             <div class="fcm-static-container">
                                                 <?php 
                                                 echo $this->render_banner_config_box([
@@ -1144,20 +1215,25 @@ class FunnelCTAManager {
                         </table>
 
                         <p class="submit">
-                            <input type="submit" name="submit_shortcode" class="button button-primary" value="Salvar Banner Shortcode">
+                            <input type="submit" name="submit_shortcode" class="button button-primary" value="Salvar">
                         </p>
                     </form>
                 </div>
 
 
-                <!-- TAB: Posts Classificados -->
+                <!-- TAB: Lista de Funil -->
                 <div id="tab-list" class="tab-content" style="display: <?php echo $active_tab === 'list' ? 'block' : 'none'; ?>;">
                     <div style="display:flex; justify-content: space-between; align-items: center;">
-                        <h2 style="font-size: 1.3em; margin:0;">Lista de Posts com CTA</h2>
+                        <h2 style="font-size: 1.3em; margin:0;">Lista de Funil</h2>
                         <div style="display:flex; gap:10px; align-items:center;">
-                            <div style="position:relative;">
-                                <input type="text" id="fcm-quick-classify-search" class="regular-text" placeholder="Adicionar post à lista..." style="width:250px;">
-                                <ul id="fcm-quick-results" style="display:none; position:absolute; left:0; right:0; background:#fff; border:1px solid #ccc; z-index:100; max-height:200px; overflow-y:auto; margin:0; padding:0; box-shadow:0 2px 4px rgba(0,0,0,0.1);"></ul>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div style="position:relative;">
+                                    <input type="text" id="fcm-quick-classify-search" class="regular-text" placeholder="Pesquisar post..." style="width:180px;">
+                                    <ul id="fcm-quick-results" style="display:none; position:absolute; left:0; right:0; background:#fff; border:1px solid #ccc; z-index:100; max-height:200px; overflow-y:auto; margin:0; padding:0; box-shadow:0 2px 4px rgba(0,0,0,0.1);"></ul>
+                                </div>
+                                <span style="color:#999;">ou</span>
+                                <input type="url" id="fcm-quick-url" class="regular-text" placeholder="Link direto (https://...)" style="width:200px;">
+                                <button type="button" id="btn-add-quick-url" class="button">Adicionar</button>
                             </div>
                             <button type="button" id="btn-export-classified" class="button"><span class="dashicons dashicons-download" style="margin-top:4px;"></span> Exportar CSV</button>
                             <button type="button" id="btn-import-classified-trigger" class="button"><span class="dashicons dashicons-upload" style="margin-top:4px;"></span> Importar CSV</button>
@@ -1327,22 +1403,46 @@ class FunnelCTAManager {
         <style>
             #fcm-search-results li { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #eee; }
             #fcm-search-results li:hover { background: #f0f0f1; }
-            .fcm-banner-column { display: flex; flex-direction: column; }
+            .fcm-banner-column { display: flex; flex-direction: column; transition: all 0.3s ease; }
             .fcm-banner-column .fcm-random-container { display: flex; flex-direction: column; flex-grow: 1; }
             /* Garantir que as caixas estáticas fiquem alinhadas no topo se houver diferença de conteúdo */
             .fcm-static-box { flex-shrink: 0; }
+            
+            .fcm-column-disabled {
+                background: #f0f0f0 !important;
+                opacity: 0.6;
+                position: relative;
+                border-radius: 8px;
+                padding: 10px;
+                pointer-events: none;
+            }
+            .fcm-column-disabled::after {
+                content: "DESATIVADO";
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%) rotate(-15deg);
+                font-size: 40px;
+                font-weight: bold;
+                color: rgba(0,0,0,0.1);
+                z-index: 10;
+            }
+            .fcm-disable-toggle-wrapper {
+                pointer-events: auto !important;
+                margin-bottom: 15px;
+            }
         </style>
         <?php
     }
 
     public function enqueue_admin_assets($hook) {
-        if ($hook !== 'toplevel_page_funnel-cta') return;
+        if (strpos($hook, 'funnel-cta') === false && strpos($hook, 'fcm-') === false) return;
         wp_enqueue_media();
     }
 
     public function admin_footer_scripts() {
         $screen = get_current_screen();
-        if ($screen->id !== 'toplevel_page_funnel-cta') return;
+        if (strpos($screen->id, 'funnel-cta') === false && strpos($screen->id, 'fcm-') === false) return;
         ?>
         <!-- Modal Posição Override -->
         <div id="fcm-pos-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; align-items:center; justify-content:center;">
@@ -1375,7 +1475,7 @@ class FunnelCTAManager {
 
         <script>
         jQuery(document).ready(function($){
-            var mainFormTabs = ['#tab-dashboard', '#tab-topo', '#tab-meio', '#tab-fundo', '#tab-padrao', '#tab-advanced', '#tab-logs', '#tab-shortcode-list', '#tab-custom-list', '#tab-list'];
+            var mainFormTabs = ['#tab-dashboard', '#tab-global', '#tab-topo', '#tab-meio', '#tab-fundo', '#tab-padrao', '#tab-advanced', '#tab-logs', '#tab-shortcode-list', '#tab-custom-list', '#tab-list'];
 
             function switchTab(href) {
                 $('.nav-tab').removeClass('nav-tab-active');
@@ -1654,6 +1754,21 @@ class FunnelCTAManager {
                 $('#fcm-target-search').val(''); $('#fcm-target-results').hide();
             });
 
+            $('#btn-add-manual-url').click(function(){
+                var url = $('#fcm-manual-url').val().trim();
+                if (!url) return;
+                
+                if (targetLinks.find(l => l.url === url)) {
+                    alert('Este link já está na lista.');
+                    $('#fcm-manual-url').val('');
+                    return;
+                }
+                
+                targetLinks.push({title: 'Link Manual', url: url, post_id: null});
+                renderTargetList();
+                $('#fcm-manual-url').val('');
+            });
+
             $(document).on('click', '.btn-remove-target', function(){
                 var idx = $(this).data('index');
                 targetLinks.splice(idx, 1);
@@ -1692,6 +1807,26 @@ class FunnelCTAManager {
                 var type = $(this).val();
                 $(target).hide();
                 $(target + '.fcm-type-field-' + type).show();
+            });
+
+            // Trigger Type Toggle on load to fix visual persistence issues
+            $('.fcm-type-selector').each(function(){
+                var target = $(this).data('target');
+                var type = $(this).val();
+                if (target) {
+                    $(target).hide();
+                    $(target + '.fcm-type-field-' + type).show();
+                }
+            });
+
+            // Column Disable logic
+            $(document).on('change', '.fcm-disable-column-toggle', function(){
+                var column = $(this).closest('.fcm-banner-column');
+                if ($(this).is(':checked')) {
+                    column.addClass('fcm-column-disabled');
+                } else {
+                    column.removeClass('fcm-column-disabled');
+                }
             });
 
             // Media Uploader Delegation
@@ -1824,23 +1959,27 @@ class FunnelCTAManager {
                 $('#cb_name').val('');
                 $('#cb_status').val('active');
                 
-                $('#cb_type').val('image').trigger('change');
-                $('#cb_type_mobile').val('image').trigger('change');
+                $('#cb_image_type').val('image').trigger('change');
+                $('#cb_image_mobile_type').val('image').trigger('change');
                 
                 $('#cb_image').val('');
                 $('#cb_image_preview').hide().attr('src', '');
                 $('#cb_image_mobile').val('');
                 $('#cb_image_mobile_preview').hide().attr('src', '');
                 
-                $('#cb_url').val('');
-                $('#cb_url_mobile').val('');
-                $('#cb_html').val('');
-                $('#cb_html_mobile').val('');
+                $('#cb_image_url').val('');
+                $('#cb_image_mobile_url').val('');
+                $('#cb_image_html').val('');
+                $('#cb_image_mobile_html').val('');
 
                 $('.fcm-banner-column[data-key="cb"] .fcm-random-container').empty();
                 
                 $('#cb_schedule').prop('checked', false).trigger('change');
                 $('#cb_allow_multiple').prop('checked', false);
+                
+                $('#cb_desktop_disabled').prop('checked', false).trigger('change');
+                $('#cb_mobile_disabled').prop('checked', false).trigger('change');
+
                 $('#cb_start').val('');
                 $('#cb_end').val('');
                 $('#cb_targets').val('');
@@ -1860,8 +1999,8 @@ class FunnelCTAManager {
                 $('#cb_name').val(data.name);
                 $('#cb_status').val(data.status);
                 
-                $('#cb_type').val(data.type || 'image').trigger('change');
-                $('#cb_type_mobile').val(data.type_mobile || 'image').trigger('change');
+                $('#cb_image_type').val(data.type || 'image').trigger('change');
+                $('#cb_image_mobile_type').val(data.type_mobile || 'image').trigger('change');
                 
                 $('#cb_image').val(data.image);
                 if(data.image_url) { 
@@ -1876,16 +2015,20 @@ class FunnelCTAManager {
                     $('#cb_image_mobile_preview').hide();
                 }
                 
-                $('#cb_url').val(data.url);
-                $('#cb_url_mobile').val(data.url_mobile);
-                $('#cb_html').val(data.html);
-                $('#cb_html_mobile').val(data.html_mobile);
+                $('#cb_image_url').val(data.url);
+                $('#cb_image_mobile_url').val(data.url_mobile);
+                $('#cb_image_html').val(data.html);
+                $('#cb_image_mobile_html').val(data.html_mobile);
 
                 populateRandomBanners($('.fcm-banner-column[data-key="cb"][data-column="desktop"] .fcm-random-container'), data.random_desktop, 'cb', 'desktop');
                 populateRandomBanners($('.fcm-banner-column[data-key="cb"][data-column="mobile"] .fcm-random-container'), data.random_mobile, 'cb', 'mobile');
                 
                 $('#cb_schedule').prop('checked', data.schedule == 1).trigger('change');
                 $('#cb_allow_multiple').prop('checked', data.allow_multiple == 1);
+                
+                $('#cb_desktop_disabled').prop('checked', data.desktop_disabled == 1).trigger('change');
+                $('#cb_mobile_disabled').prop('checked', data.mobile_disabled == 1).trigger('change');
+
                 $('#cb_start').val(data.start);
                 $('#cb_end').val(data.end);
                 
@@ -1911,22 +2054,26 @@ class FunnelCTAManager {
                 $('#scb_name').val('');
                 $('#scb_status').val('active');
                 
-                $('#scb_type').val('image').trigger('change');
-                $('#scb_type_mobile').val('image').trigger('change');
+                $('#scb_image_type').val('image').trigger('change');
+                $('#scb_image_mobile_type').val('image').trigger('change');
                 
                 $('#scb_image').val('');
                 $('#scb_image_preview').hide().attr('src', '');
                 $('#scb_image_mobile').val('');
                 $('#scb_image_mobile_preview').hide().attr('src', '');
                 
-                $('#scb_url').val('');
-                $('#scb_url_mobile').val('');
-                $('#scb_html').val('');
-                $('#scb_html_mobile').val('');
+                $('#scb_image_url').val('');
+                $('#scb_image_mobile_url').val('');
+                $('#scb_image_html').val('');
+                $('#scb_image_mobile_html').val('');
 
                 $('.fcm-banner-column[data-key="scb"] .fcm-random-container').empty();
                 
                 $('#scb_schedule').prop('checked', false).trigger('change');
+                
+                $('#scb_desktop_disabled').prop('checked', false).trigger('change');
+                $('#scb_mobile_disabled').prop('checked', false).trigger('change');
+
                 $('#scb_start').val('');
                 $('#scb_end').val('');
 
@@ -1943,8 +2090,8 @@ class FunnelCTAManager {
                 $('#scb_name').val(data.name);
                 $('#scb_status').val(data.status);
                 
-                $('#scb_type').val(data.type || 'image').trigger('change');
-                $('#scb_type_mobile').val(data.type_mobile || 'image').trigger('change');
+                $('#scb_image_type').val(data.type || 'image').trigger('change');
+                $('#scb_image_mobile_type').val(data.type_mobile || 'image').trigger('change');
                 
                 $('#scb_image').val(data.image);
                 if(data.image_url) { 
@@ -1959,15 +2106,19 @@ class FunnelCTAManager {
                     $('#scb_image_mobile_preview').hide();
                 }
                 
-                $('#scb_url').val(data.url);
-                $('#scb_url_mobile').val(data.url_mobile);
-                $('#scb_html').val(data.html);
-                $('#scb_html_mobile').val(data.html_mobile);
+                $('#scb_image_url').val(data.url);
+                $('#scb_image_mobile_url').val(data.url_mobile);
+                $('#scb_image_html').val(data.html);
+                $('#scb_image_mobile_html').val(data.html_mobile);
 
                 populateRandomBanners($('.fcm-banner-column[data-key="scb"][data-column="desktop"] .fcm-random-container'), data.random_desktop, 'scb', 'desktop');
                 populateRandomBanners($('.fcm-banner-column[data-key="scb"][data-column="mobile"] .fcm-random-container'), data.random_mobile, 'scb', 'mobile');
                 
                 $('#scb_schedule').prop('checked', data.schedule == 1).trigger('change');
+                
+                $('#scb_desktop_disabled').prop('checked', data.desktop_disabled == 1).trigger('change');
+                $('#scb_mobile_disabled').prop('checked', data.mobile_disabled == 1).trigger('change');
+
                 $('#scb_start').val(data.start);
                 $('#scb_end').val(data.end);
 
@@ -2150,6 +2301,31 @@ class FunnelCTAManager {
                 $('#fcm-quick-classify-search').val(''); $('#fcm-quick-results').hide();
             });
 
+            $('#btn-add-quick-url').click(function(){
+                var url = $('#fcm-quick-url').val().trim();
+                if (!url) return;
+                
+                var $btn = $(this);
+                $btn.prop('disabled', true).text('Buscando...');
+                
+                $.post(ajaxurl, {action: 'fcm_get_post_by_url', url: url}, function(res){
+                    $btn.prop('disabled', false).text('Adicionar');
+                    if (res.success) {
+                        var id = res.data.id;
+                        var stage = prompt('Digite o estágio (topo, meio, fundo):', 'topo');
+                        if (stage && ['topo', 'meio', 'fundo'].indexOf(stage.toLowerCase()) !== -1) {
+                            $.post(ajaxurl, {action: 'fcm_save_post_stage', post_id: id, stage: stage.toLowerCase()}, function(){
+                                location.reload();
+                            });
+                        } else if (stage) {
+                            alert('Estágio inválido. Use topo, meio ou fundo.');
+                        }
+                    } else {
+                        alert('Post não encontrado para esta URL.');
+                    }
+                });
+            });
+
             $(document).click(function(event) { 
                 var $target = $(event.target);
                 if(!$target.closest('#fcm-target-search').length && !$target.closest('#fcm-target-results').length) {
@@ -2162,6 +2338,17 @@ class FunnelCTAManager {
             });
         </script>
         <?php
+    }
+
+    public function handle_get_post_by_url() {
+        if (!current_user_can('manage_options')) wp_die();
+        $url = esc_url_raw($_POST['url']);
+        $post_id = url_to_postid($url);
+        if ($post_id) {
+            wp_send_json_success(['id' => $post_id, 'title' => get_the_title($post_id)]);
+        } else {
+            wp_send_json_error();
+        }
     }
 
     public function handle_post_search() {
@@ -2325,12 +2512,15 @@ class FunnelCTAManager {
         $random_desktop = $options[$prefix . '_random_desktop'] ?? [];
         $random_mobile = $options[$prefix . '_random_mobile'] ?? [];
 
-        // Escolher
-        $picked_desktop = $this->get_random_banner($random_desktop, $static_desktop);
-        $picked_mobile = $this->get_random_banner($random_mobile, $static_mobile);
+        $desktop_disabled = !empty($options[$prefix . '_desktop_disabled']);
+        $mobile_disabled = !empty($options[$prefix . '_mobile_disabled']);
 
-        // Fallback: Se mobile estiver vazio, tenta o desktop estático
-        if (!$picked_mobile && $this->is_banner_valid($static_desktop)) {
+        // Escolher
+        $picked_desktop = $desktop_disabled ? null : $this->get_random_banner($random_desktop, $static_desktop);
+        $picked_mobile = $mobile_disabled ? null : $this->get_random_banner($random_mobile, $static_mobile);
+
+        // Fallback: Se mobile estiver vazio e NÃO estiver desativado, tenta o desktop estático (se este não estiver desativado)
+        if (!$mobile_disabled && !$picked_mobile && !$desktop_disabled && $this->is_banner_valid($static_desktop)) {
             $picked_mobile = $static_desktop;
         }
 
@@ -2395,12 +2585,15 @@ class FunnelCTAManager {
         $random_desktop = $cb['random_desktop'] ?? [];
         $random_mobile = $cb['random_mobile'] ?? [];
 
-        // Escolher
-        $picked_desktop = $this->get_random_banner($random_desktop, $static_desktop);
-        $picked_mobile = $this->get_random_banner($random_mobile, $static_mobile);
+        $desktop_disabled = !empty($cb['desktop_disabled']);
+        $mobile_disabled = !empty($cb['mobile_disabled']);
 
-        // Fallback Mobile
-        if (!$picked_mobile && $this->is_banner_valid($static_desktop)) {
+        // Escolher
+        $picked_desktop = $desktop_disabled ? null : $this->get_random_banner($random_desktop, $static_desktop);
+        $picked_mobile = $mobile_disabled ? null : $this->get_random_banner($random_mobile, $static_mobile);
+
+        // Fallback Mobile: Se mobile estiver vazio e NÃO estiver desativado, tenta o desktop estático
+        if (!$mobile_disabled && !$picked_mobile && !$desktop_disabled && $this->is_banner_valid($static_desktop)) {
             $picked_mobile = $static_desktop;
         }
 
