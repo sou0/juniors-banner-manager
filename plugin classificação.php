@@ -135,26 +135,28 @@ class FunnelCTAManager {
         if (!current_user_can('manage_options')) wp_die();
         $options = get_option($this->option_name);
         $custom_banners = get_option($this->custom_banners_option, []);
-        $html = '';
+        
+        $label_topo = isset($options['label_topo']) && !empty($options['label_topo']) ? $options['label_topo'] : 'Topo de Funil';
+        $label_meio = isset($options['label_meio']) && !empty($options['label_meio']) ? $options['label_meio'] : 'Meio de Funil';
+        $label_fundo = isset($options['label_fundo']) && !empty($options['label_fundo']) ? $options['label_fundo'] : 'Fundo de Funil';
+        $stage_labels = ['topo' => $label_topo, 'meio' => $label_meio, 'fundo' => $label_fundo];
 
-        $global_allow_multiple = !empty($options['global_allow_multiple']);
-        $global_active = $this->is_banner_active($options, 'global');
-
-        $html .= '<ul style="margin: 0; padding: 0; list-style: none;">';
-
-        if ($global_active) {
-            $html .= '<li style="background:#fff; border-left:4px solid '.($global_allow_multiple ? '#00a32a' : '#dba617').'; padding:15px; margin-bottom:10px; border-radius:4px; box-shadow:0 1px 1px rgba(0,0,0,0.04);">';
-            $html .= '<strong>Banner Global (Aparece em todos os posts)</strong><br>';
-            if ($global_allow_multiple) {
-                $html .= 'Modo simultâneo <strong>ATIVADO</strong>. O banner Global aparecerá junto com banners de Estágios, a não ser que tentem ocupar a mesma posição (' . esc_html($options['global_position'] ?? 'middle') . '). ';
-            } else {
-                $html .= 'Modo simultâneo <strong>DESATIVADO</strong>. Se o post tiver uma classificação de Funil com imagem, o Banner Global será "engolido" e não aparecerá. ';
-            }
-            $html .= '<br><a href="#" onclick="jQuery(\'.fcm-go-to-tab[data-target=\\\'#tab-global\\\']\').click(); return false;">Configurar Banner Global</a>';
-            $html .= '</li>';
-        } else {
-            $html .= '<li style="background:#fff; border-left:4px solid #ccc; padding:15px; margin-bottom:10px; border-radius:4px;">Banner Global inativo.</li>';
+        // Mapear posts classificados
+        $classified_posts = get_posts([
+            'post_type' => 'post',
+            'posts_per_page' => -1,
+            'post_status' => 'any',
+            'meta_query' => [['key' => '_fcm_stage', 'compare' => 'EXISTS']]
+        ]);
+        
+        $post_stages = [];
+        $post_titles = [];
+        foreach($classified_posts as $p) {
+            $post_stages[$p->ID] = get_post_meta($p->ID, '_fcm_stage', true);
+            $post_titles[$p->ID] = $p->post_title;
         }
+
+        $conflicts = []; // Grupos de conflito
 
         foreach ($custom_banners as $cb) {
             if ($cb['status'] !== 'active') continue;
@@ -163,27 +165,58 @@ class FunnelCTAManager {
             $targets = array_filter($targets);
             if (empty($targets)) continue;
 
-            $allow_multiple = !empty($cb['allow_multiple']);
-            
-            $html .= '<li style="background:#fff; border-left:4px solid '.($allow_multiple ? '#2271b1' : '#d63638').'; padding:15px; margin-bottom:10px; border-radius:4px; box-shadow:0 1px 1px rgba(0,0,0,0.04);">';
-            $html .= '<strong>Banner de Override: ' . esc_html($cb['name']) . '</strong><br>';
-            if (!$allow_multiple) {
-                $html .= '⚠️ Este banner está configurado como <strong>EXCLUSIVO</strong>. Ele está <strong>bloqueando / engolindo TODOS os outros banners</strong> (Global e Estágios) em <strong>' . count($targets) . ' links</strong>. ';
-            } else {
-                $html .= 'ℹ️ Este banner permite múltiplos simultâneos, porém <strong>irá bloquear e sobrescrever qualquer outro banner que tente usar a posição (' . esc_html($cb['position'] ?? 'middle') . ')</strong> nos seus <strong>' . count($targets) . ' links</strong> afetados. ';
+            foreach ($targets as $url) {
+                $pid = url_to_postid($url);
+                if ($pid && isset($post_stages[$pid])) {
+                    $stage = $post_stages[$pid];
+                    $group_key = $cb['id'] . '_' . $stage;
+                    
+                    if (!isset($conflicts[$group_key])) {
+                        $conflicts[$group_key] = [
+                            'cb_id' => $cb['id'],
+                            'cb_name' => $cb['name'],
+                            'stage' => $stage,
+                            'stage_label' => $stage_labels[$stage] ?? $stage,
+                            'cb_exclusive' => empty($cb['allow_multiple']),
+                            'links' => []
+                        ];
+                    }
+                    $conflicts[$group_key]['links'][] = [
+                        'url' => $url,
+                        'id' => $pid,
+                        'title' => $post_titles[$pid]
+                    ];
+                }
             }
-            $html .= '<br><a href="#" onclick="jQuery(this).next(\'div\').slideToggle(); return false;">Exibir/Ocultar links afetados</a>';
-            $html .= ' | <a href="#" class="btn-edit-custom-banner" data-banner=\''.esc_attr(json_encode($cb)).'\'>Configurar este Banner</a>';
-            
-            $html .= '<div style="display:none; margin-top:10px; background:#f9f9f9; padding:10px; border:1px solid #eee;">';
-            foreach ($targets as $t) {
-                $html .= '<code style="display:block; margin-bottom:3px;">' . esc_html($t) . '</code>';
-            }
-            $html .= '</div>';
-            $html .= '</li>';
         }
 
-        $html .= '</ul>';
+        if (empty($conflicts)) {
+            echo '<div style="padding:15px; background:#d4edda; color:#155724; border-radius:4px; border:1px solid #c3e6cb;">Nenhum conflito direto detectado entre Banners de Override e Estágios de Funil no momento.</div>';
+            wp_die();
+        }
+
+        $html = '<div style="display:flex; flex-direction:column; gap:15px;">';
+        foreach ($conflicts as $key => $group) {
+            $count = count($group['links']);
+            $exclusive_warning = $group['cb_exclusive'] 
+                ? '<span style="color:#d63638; font-weight:bold; font-size:12px;">(EXCLUSIVO: Substitui o Funil)</span>' 
+                : '<span style="color:#2271b1; font-weight:bold; font-size:12px;">(Simultâneo: Pode causar duplicidade na mesma posição)</span>';
+
+            $html .= '<div style="background:#fff; border:1px solid #ccd0d4; border-left:4px solid '.($group['cb_exclusive'] ? '#d63638' : '#2271b1').'; padding:15px; border-radius:4px; box-shadow:0 1px 1px rgba(0,0,0,0.04);">';
+            $html .= '<div style="display:flex; justify-content:space-between; align-items:center;">';
+            $html .= '<div>';
+            $html .= '<h4 style="margin:0 0 5px 0; font-size:14px;">Override <strong>"'.esc_html($group['cb_name']).'"</strong> interferindo no estágio <strong>"'.esc_html($group['stage_label']).'"</strong></h4>';
+            $html .= '<div style="font-size:13px; color:#555;">' . $count . ' link(s) afetado(s) ' . $exclusive_warning . '</div>';
+            $html .= '</div>';
+            
+            // Botão para abrir os detalhes
+            $group_json = esc_attr(json_encode($group));
+            $html .= '<button type="button" class="button button-secondary btn-view-conflict-details" data-group="'.$group_json.'">Ver Detalhes</button>';
+            $html .= '</div>';
+            $html .= '</div>';
+        }
+        $html .= '</div>';
+
         echo $html;
         wp_die();
     }
@@ -769,16 +802,6 @@ class FunnelCTAManager {
                     </form>
                 </div>
 
-                <!-- TAB: Monitor de Conflitos -->
-                <div id="tab-logs" class="tab-content" style="display: <?php echo $active_tab === 'logs' ? 'block' : 'none'; ?>;">
-                    <h2 style="font-size: 1.3em; margin-top:0;">Monitor de Conflitos e Substituições</h2>
-                    <p class="description">Esta ferramenta analisa as configurações ativas e identifica como os banners estão agindo (bloqueando ou sobrescrevendo outros).</p>
-                    <hr style="margin: 20px 0;">
-                    <button type="button" id="btn-run-conflict-analysis" class="button button-primary"><span class="dashicons dashicons-chart-pie" style="margin-top:4px;"></span> Analisar Cenário Atual</button>
-                    <span class="spinner" id="fcm-analysis-spinner" style="float:none; margin-top:3px;"></span>
-                    <div id="fcm-conflict-results" style="margin-top: 20px;"></div>
-                </div>
-
                 <!-- TAB: Criar/Editar Banner Especial OVERRIDE (Form) -->
                 <div id="tab-custom-edit" class="tab-content" style="display: <?php echo $active_tab === 'custom-edit' ? 'block' : 'none'; ?>;">
                     <h2 style="font-size: 1.3em; margin-top:0;" id="custom-edit-title">Criar Banner de Override</h2>
@@ -1002,16 +1025,6 @@ class FunnelCTAManager {
                             <?php endif; ?>
                         </tbody>
                     </table>
-                </div>
-
-                <!-- TAB: Monitor de Conflitos -->
-                <div id="tab-logs" class="tab-content" style="display: <?php echo $active_tab === 'logs' ? 'block' : 'none'; ?>;">
-                    <h2 style="font-size: 1.3em; margin-top:0;">Monitor de Conflitos e Substituições</h2>
-                    <p class="description">Esta ferramenta analisa as configurações ativas e identifica como os banners estão agindo (bloqueando ou sobrescrevendo outros).</p>
-                    <hr style="margin: 20px 0;">
-                    <button type="button" id="btn-run-conflict-analysis" class="button button-primary"><span class="dashicons dashicons-chart-pie" style="margin-top:4px;"></span> Analisar Cenário Atual</button>
-                    <span class="spinner" id="fcm-analysis-spinner" style="float:none; margin-top:3px;"></span>
-                    <div id="fcm-conflict-results" style="margin-top: 20px;"></div>
                 </div>
 
                 <!-- TAB: Criar/Editar Banner SHORTCODE (Form) -->
@@ -1270,12 +1283,43 @@ class FunnelCTAManager {
 
                 <!-- TAB: Monitor de Conflitos -->
                 <div id="tab-logs" class="tab-content" style="display: <?php echo $active_tab === 'logs' ? 'block' : 'none'; ?>;">
-                    <h2 style="font-size: 1.3em; margin-top:0;">Monitor de Conflitos e Substituições</h2>
-                    <p class="description">Esta ferramenta analisa as configurações ativas e identifica como os banners estão agindo (bloqueando ou sobrescrevendo outros).</p>
+                    <h2 style="font-size: 1.3em; margin-top:0;">Monitor de Conflitos</h2>
+                    <p class="description">Esta ferramenta analisa as configurações ativas e identifica conflitos diretos entre Banners de Override e Estágios de Funil configurados nas mesmas páginas.</p>
                     <hr style="margin: 20px 0;">
-                    <button type="button" id="btn-run-conflict-analysis" class="button button-primary"><span class="dashicons dashicons-chart-pie" style="margin-top:4px;"></span> Analisar Cenário Atual</button>
-                    <span class="spinner" id="fcm-analysis-spinner" style="float:none; margin-top:3px;"></span>
-                    <div id="fcm-conflict-results" style="margin-top: 20px;"></div>
+                    
+                    <div id="fcm-conflict-results-container">
+                        <span class="spinner" id="fcm-analysis-spinner" style="float:none; margin-top:3px; display:none;"></span>
+                        <div id="fcm-conflict-results">Carregando análise...</div>
+                    </div>
+                </div>
+
+                <!-- TAB: Detalhes do Conflito (Oculta) -->
+                <div id="tab-conflict-details" class="tab-content" style="display: none;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2 style="font-size: 1.3em; margin:0;" id="conflict-details-title">Detalhes do Conflito</h2>
+                        <div>
+                            <button type="button" class="button fcm-go-to-tab" data-target="#tab-logs">&larr; Voltar aos Grupos</button>
+                        </div>
+                    </div>
+                    <p class="description" id="conflict-details-desc"></p>
+                    <hr style="margin: 20px 0;">
+
+                    <div style="margin-bottom: 20px; display:flex; gap:10px;">
+                        <button type="button" class="button button-primary" id="btn-configure-override">Configurar Override</button>
+                        <button type="button" class="button" id="btn-configure-stage">Configurar Estágio</button>
+                    </div>
+
+                    <table class="wp-list-table widefat fixed striped">
+                        <thead>
+                            <tr>
+                                <th>Post Afetado</th>
+                                <th>Ações de Navegação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="conflict-details-list">
+                            <!-- Preenchido via JS -->
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -1354,6 +1398,15 @@ class FunnelCTAManager {
                     $('#fcm-main-submit-btn').show();
                 } else {
                     $('#fcm-main-submit-btn').hide();
+                }
+
+                if (href === '#tab-logs') {
+                    $('#fcm-analysis-spinner').show();
+                    $('#fcm-conflict-results').html('Carregando análise...');
+                    $.post(ajaxurl, {action: 'fcm_analyze_conflicts'}, function(res){
+                        $('#fcm-analysis-spinner').hide();
+                        $('#fcm-conflict-results').html(res);
+                    });
                 }
 
                 var tabName = href.replace('#tab-', '');
@@ -1922,13 +1975,83 @@ class FunnelCTAManager {
             });
 
 
-            // ----- AJAX ----- //
-            $('#btn-run-conflict-analysis').click(function(){
-                $('#fcm-analysis-spinner').addClass('is-active');
-                $.post(ajaxurl, {action: 'fcm_analyze_conflicts'}, function(res){
-                    $('#fcm-analysis-spinner').removeClass('is-active');
-                    $('#fcm-conflict-results').html(res);
+            // ----- MONITOR DE CONFLITOS E DESTAQUES ----- //
+            $(document).on('click', '.btn-view-conflict-details', function(e){
+                e.preventDefault();
+                var group = $(this).data('group');
+                
+                $('#conflict-details-title').text('Conflitos do Override "' + group.cb_name + '"');
+                var desc = group.cb_exclusive 
+                    ? 'Este Override está configurado como exclusivo e vai engolir o banner do estágio <strong>' + group.stage_label + '</strong> nos links abaixo.'
+                    : 'Este Override está configurado para aparecer junto com o funil, mas pode haver duplicidade se disputarem a mesma posição no estágio <strong>' + group.stage_label + '</strong>.';
+                $('#conflict-details-desc').html(desc);
+
+                $('#btn-configure-override').off('click').on('click', function(){
+                    // Precisamos achar o banner completo.
+                    var $row = $('#table-overrides-banners input[value="'+group.cb_id+'"]').closest('tr');
+                    $row.find('.btn-edit-custom-banner').click();
                 });
+
+                $('#btn-configure-stage').off('click').on('click', function(){
+                    switchTab('#tab-' + group.stage);
+                });
+
+                var tbody = '';
+                group.links.forEach(function(link){
+                    tbody += `<tr>
+                        <td><strong>${link.title}</strong><br><small><a href="${link.url}" target="_blank">${link.url}</a></small></td>
+                        <td>
+                            <button type="button" class="button button-small btn-highlight-override-link" data-cb="${group.cb_id}" data-url="${link.url}">Destacar no Override</button>
+                            <button type="button" class="button button-small btn-highlight-list-link" data-id="${link.id}">Destacar em Classificados</button>
+                        </td>
+                    </tr>`;
+                });
+                $('#conflict-details-list').html(tbody);
+                
+                $('#tab-logs').hide();
+                $('#tab-conflict-details').fadeIn('fast');
+            });
+
+            function highlightRow($row) {
+                if (!$row || !$row.length) return;
+                $row[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                $row.css('background-color', '#fff3cd');
+                setTimeout(function(){
+                    $row.css('transition', 'background-color 1.5s');
+                    $row.css('background-color', '');
+                    setTimeout(function(){ $row.css('transition', ''); }, 1500);
+                }, 1000);
+            }
+
+            $(document).on('click', '.btn-highlight-override-link', function(){
+                var cb_id = $(this).data('cb');
+                var url = $(this).data('url');
+                
+                // Abrir o editor do override
+                var $bannerRow = $('#table-overrides-banners input[value="'+cb_id+'"]').closest('tr');
+                if ($bannerRow.length) {
+                    $bannerRow.find('.btn-edit-custom-banner').click();
+                    setTimeout(function(){
+                        // Procurar a linha na tabela de links interna
+                        var $linkRow = null;
+                        $('#fcm-target-list-body tr').each(function(){
+                            if ($(this).find('.fcm-row-url a').attr('href') === url) {
+                                $linkRow = $(this);
+                                return false; // break
+                            }
+                        });
+                        highlightRow($linkRow);
+                    }, 500); // Dar tempo para renderizar a tabela interna
+                }
+            });
+
+            $(document).on('click', '.btn-highlight-list-link', function(){
+                var id = $(this).data('id');
+                switchTab('#tab-list');
+                setTimeout(function(){
+                    var $row = $('#tab-list .fcm-classified-cb[value="'+id+'"]').closest('tr');
+                    highlightRow($row);
+                }, 300);
             });
 
             $('#fcm-run-import').click(function(){
