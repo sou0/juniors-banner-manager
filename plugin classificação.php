@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Junior's banner manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 4.0
+ * Version: 4.1
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -444,7 +444,7 @@ class FunnelCTAManager {
         }
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.0</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.1</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
@@ -2665,7 +2665,15 @@ class FunnelCTAManager {
             $matched = false;
             foreach ($targets as $t) {
                 if (empty($t)) continue;
-                if (strpos($current_url, $t) !== false || $t == $post_id) {
+                $is_match = false;
+                if (strpos($t, '*') !== false) {
+                    $pattern = '#' . str_replace('\*', '.*', preg_quote($t, '#')) . '#i';
+                    if (preg_match($pattern, $current_url)) $is_match = true;
+                } else {
+                    if (strpos($current_url, $t) !== false || $t == $post_id) $is_match = true;
+                }
+                
+                if ($is_match) {
                     $matched = true; break;
                 }
             }
@@ -2732,7 +2740,14 @@ class FunnelCTAManager {
                     if (!empty(trim($global_excluded_targets_str))) {
                         $ex_targets = array_filter(array_map('trim', explode("\n", $global_excluded_targets_str)));
                         foreach ($ex_targets as $et) {
-                            if (strpos($current_url, $et) !== false || $et == $post_id) {
+                            $is_match = false;
+                            if (strpos($et, '*') !== false) {
+                                $pattern = '#' . str_replace('\*', '.*', preg_quote($et, '#')) . '#i';
+                                if (preg_match($pattern, $current_url)) $is_match = true;
+                            } else {
+                                if (strpos($current_url, $et) !== false || $et == $post_id) $is_match = true;
+                            }
+                            if ($is_match) {
                                 $global_excluded = true; break;
                             }
                         }
@@ -2788,16 +2803,19 @@ class FunnelCTAManager {
             // 1. Prioridade absoluta para Selectores Customizados
             if (customSelectors.length > 0) {
                 for (var i = 0; i < customSelectors.length; i++) {
-                    var el = document.querySelector(customSelectors[i]);
-                    if (el) {
-                        mainContainer = el;
-                        break; // Se achou um customizado, usa ele imediatamente
-                    }
+                    var els = document.querySelectorAll(customSelectors[i]);
+                    els.forEach(function(el) {
+                        var pList = el.querySelectorAll('p');
+                        if (!mainContainer || pList.length > maxP) {
+                            maxP = pList.length;
+                            mainContainer = el;
+                        }
+                    });
                 }
             }
 
-            // 2. Fallback para Selectores Padrão se não achou customizado
-            if (!mainContainer) {
+            // 2. Fallback para Selectores Padrão SOMENTE se NÃO houver selectores customizados configurados
+            if (customSelectors.length === 0) {
                 for (var i = 0; i < selectors.length; i++) {
                     var els = document.querySelectorAll(selectors[i]);
                     els.forEach(function(el) {
