@@ -2,31 +2,37 @@
 /**
  * Plugin Name: Junior's banner manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 4.1
+ * Version: 4.2
  * Author: junior
  * Text Domain: funnel-cta
  */
 
 if (!defined('ABSPATH')) exit;
 
-require_once __DIR__ . '/plugin-update-checker/plugin-update-checker.php';
-use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
-$myUpdateChecker = PucFactory::buildUpdateChecker(
-	'https://github.com/sou0/juniors-banner-manager/',
-	__FILE__,
-	'banner-manager'
-);
-$myUpdateChecker->setBranch('main');
 
 class FunnelCTAManager {
 
     private $option_name = 'fcm_settings';
     private $custom_banners_option = 'fcm_custom_banners';
     private $shortcode_banners_option = 'fcm_shortcode_banners';
+    private $custom_funnels_option = 'fcm_custom_funnels';
+
+    private function get_custom_funnels() {
+        $custom_funnels = get_option($this->custom_funnels_option);
+        if ($custom_funnels === false) {
+            $options = get_option($this->option_name);
+            $custom_funnels = isset($options['custom_funnels']) && is_array($options['custom_funnels']) ? $options['custom_funnels'] : [];
+            if (!empty($custom_funnels)) {
+                update_option($this->custom_funnels_option, $custom_funnels);
+            }
+        }
+        return is_array($custom_funnels) ? $custom_funnels : [];
+    }
 
     public function __construct() {
         add_action('admin_menu', [$this, 'create_menu']);
+        add_action('admin_init', [$this, 'handle_custom_funnel_save']);
         add_action('admin_init', [$this, 'handle_custom_banner_save']);
         add_action('admin_init', [$this, 'handle_shortcode_banner_save']);
         add_action('admin_init', [$this, 'handle_bulk_actions']);
@@ -142,9 +148,18 @@ class FunnelCTAManager {
         $label_fundo = isset($options['label_fundo']) && !empty($options['label_fundo']) ? $options['label_fundo'] : 'Fundo de Funil';
         $stage_labels = ['topo' => $label_topo, 'meio' => $label_meio, 'fundo' => $label_fundo];
 
+        $custom_funnels = $this->get_custom_funnels();
+        foreach ($custom_funnels as $cf_id => $cf) {
+            if (!empty($cf['name'])) {
+                $stage_labels[$cf_id] = $cf['name'];
+            }
+        }
+
+        $enabled_post_types = isset($options['enabled_post_types']) ? (array)$options['enabled_post_types'] : ['post'];
+
         // Mapear posts classificados
         $classified_posts = get_posts([
-            'post_type' => 'post',
+            'post_type' => $enabled_post_types,
             'posts_per_page' => -1,
             'post_status' => 'any',
             'meta_query' => [['key' => '_fcm_stage', 'compare' => 'EXISTS']]
@@ -235,6 +250,46 @@ class FunnelCTAManager {
         add_submenu_page('funnel-cta', 'Meio de Funil', 'Meio de Funil', 'manage_options', 'fcm-meio', [$this, 'render_admin_page']);
         add_submenu_page('funnel-cta', 'Fundo de Funil', 'Fundo de Funil', 'manage_options', 'fcm-fundo', [$this, 'render_admin_page']);
         add_submenu_page('funnel-cta', 'Imagem Padrão', 'Imagem Padrão', 'manage_options', 'fcm-padrao', [$this, 'render_admin_page']);
+    }
+
+    public function handle_custom_funnel_save() {
+        if (!current_user_can('manage_options')) return;
+
+        // Salvar / Criar Funil Personalizado
+        if (isset($_POST['fcm_save_funnel']) && isset($_POST['fcm_funnel_nonce']) && wp_verify_nonce($_POST['fcm_funnel_nonce'], 'fcm_save_funnel_action')) {
+            $custom_funnels = $this->get_custom_funnels();
+
+            $id = !empty($_POST['funnel_id']) ? sanitize_text_field($_POST['funnel_id']) : 'funnel_' . time();
+            $name = !empty($_POST['funnel_name']) ? sanitize_text_field($_POST['funnel_name']) : 'Novo Funil';
+            $description = isset($_POST['funnel_description']) ? sanitize_textarea_field($_POST['funnel_description']) : '';
+            $post_types = isset($_POST['funnel_post_types']) && is_array($_POST['funnel_post_types']) ? array_map('sanitize_text_field', $_POST['funnel_post_types']) : ['post'];
+
+            $custom_funnels[$id] = [
+                'id'          => $id,
+                'name'        => $name,
+                'description' => $description,
+                'post_types'  => $post_types,
+                'status'      => 'active',
+                'date_created'=> isset($custom_funnels[$id]['date_created']) ? $custom_funnels[$id]['date_created'] : date('Y-m-d H:i:s'),
+            ];
+
+            update_option($this->custom_funnels_option, $custom_funnels);
+
+            wp_redirect(admin_url('admin.php?page=funnel-cta&tab=dashboard&msg=funnel_saved'));
+            exit;
+        }
+
+        // Deletar Funil Personalizado
+        if (isset($_GET['fcm_del_funnel']) && isset($_GET['_wpnonce']) && wp_verify_nonce($_GET['_wpnonce'], 'del_funnel_' . $_GET['fcm_del_funnel'])) {
+            $id = sanitize_text_field($_GET['fcm_del_funnel']);
+            $custom_funnels = $this->get_custom_funnels();
+            if (isset($custom_funnels[$id])) {
+                unset($custom_funnels[$id]);
+                update_option($this->custom_funnels_option, $custom_funnels);
+            }
+            wp_redirect(admin_url('admin.php?page=funnel-cta&tab=dashboard&msg=funnel_deleted'));
+            exit;
+        }
     }
 
     public function handle_custom_banner_save() {
@@ -389,8 +444,8 @@ class FunnelCTAManager {
             $start = !empty($cb['start']) ? $this->get_utc_timestamp($cb['start']) : 0;
             $end = !empty($cb['end']) ? $this->get_utc_timestamp($cb['end']) : 0;
         } else {
-            $img_id = isset($options[$key]) ? $options[$key] : '';
-            if (!$img_id) return '<span style="color:#b32d2e; font-weight:bold;"><span class="dashicons dashicons-no-alt"></span> Não configurado</span>';
+            $is_active = $this->is_banner_active($options, $key);
+            if (!$is_active) return '<span style="color:#b32d2e; font-weight:bold;"><span class="dashicons dashicons-no-alt"></span> Inativo / Não configurado</span>';
             $scheduled = !empty($options[$key . '_schedule']);
             $start = !empty($options[$key . '_start']) ? $this->get_utc_timestamp($options[$key . '_start']) : 0;
             $end = !empty($options[$key . '_end']) ? $this->get_utc_timestamp($options[$key . '_end']) : 0;
@@ -420,13 +475,20 @@ class FunnelCTAManager {
         $label_meio = isset($options['label_meio']) && !empty($options['label_meio']) ? $options['label_meio'] : 'Meio de Funil';
         $label_fundo = isset($options['label_fundo']) && !empty($options['label_fundo']) ? $options['label_fundo'] : 'Fundo de Funil';
 
+        $custom_funnels = $this->get_custom_funnels();
+
         $stages = [
             'global' => 'Banner Global (Todos os Posts)',
-            'topo' => $label_topo, 
-            'meio' => $label_meio, 
-            'fundo' => $label_fundo,
-            'padrao' => 'Imagem Padrão'
+            'topo'   => $label_topo, 
+            'meio'   => $label_meio, 
+            'fundo'  => $label_fundo,
         ];
+
+        foreach ($custom_funnels as $cf_id => $cf) {
+            $stages[$cf_id] = $cf['name'];
+        }
+
+        $stages['padrao'] = 'Imagem Padrão';
 
         $current_page = isset($_GET['page']) ? $_GET['page'] : '';
         $active_tab = isset($_GET['tab']) ? sanitize_text_field($_GET['tab']) : 'dashboard';
@@ -444,10 +506,12 @@ class FunnelCTAManager {
         }
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.1</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.2</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
+            <?php if (isset($_GET['msg']) && $_GET['msg'] === 'funnel_saved') echo '<div class="notice notice-success is-dismissible"><p>Funil salvo com sucesso!</p></div>'; ?>
+            <?php if (isset($_GET['msg']) && $_GET['msg'] === 'funnel_deleted') echo '<div class="notice notice-success is-dismissible"><p>Funil excluído com sucesso!</p></div>'; ?>
 
             <h2 class="nav-tab-wrapper fcm-tabs" style="margin-bottom: 0;">
                 <a href="#tab-dashboard" class="nav-tab <?php echo $active_tab === 'dashboard' ? 'nav-tab-active' : ''; ?>">Visão Geral</a>
@@ -464,8 +528,9 @@ class FunnelCTAManager {
                 <a href="#tab-advanced" class="nav-tab <?php echo $active_tab === 'advanced' ? 'nav-tab-active' : ''; ?>" style="color: #666;"><span class="dashicons dashicons-admin-generic" style="margin-top:4px;"></span> Avançado</a>
 
                 <?php // Abas ocultas mas acessíveis via hash ou submenu ?>
-                <?php foreach (['topo', 'meio', 'fundo', 'padrao'] as $hidden_k): ?>
-                    <a href="#tab-<?php echo $hidden_k; ?>" class="nav-tab fcm-hidden-tab <?php echo $active_tab === $hidden_k ? 'nav-tab-active' : ''; ?>" style="display:none;"></a>
+                <?php foreach (array_keys($stages) as $hidden_k): ?>
+                    <?php if (in_array($hidden_k, ['dashboard', 'global', 'custom-list', 'shortcode-list', 'list', 'logs', 'advanced'])) continue; ?>
+                    <a href="#tab-<?php echo esc_attr($hidden_k); ?>" class="nav-tab fcm-hidden-tab <?php echo $active_tab === $hidden_k ? 'nav-tab-active' : ''; ?>" style="display:none;"></a>
                 <?php endforeach; ?>
             </h2>
 
@@ -477,34 +542,138 @@ class FunnelCTAManager {
                     
                     <!-- TAB: Dashboard Central -->
                     <div id="tab-dashboard" class="tab-content" style="display: <?php echo $active_tab === 'dashboard' ? 'block' : 'none'; ?>;">
-                        <h2 style="font-size: 1.3em; margin-top:0;">Central de Banners</h2>
-                        <p class="description">Visão geral do status de todos os seus CTAs Padrões.</p>
-                        <hr style="margin: 20px 0;">
-                        
-                        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                            <?php foreach ($stages as $key => $label): ?>
-                                <div style="flex: 1; min-width: 200px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background: #f9f9f9; text-align: center;">
-                                    <h3 style="margin-top: 0; font-size: 1.2em; color: #2271b1;"><?php echo esc_html($label); ?></h3>
-                                    <div style="margin: 15px 0; font-size: 14px;">
-                                        <?php echo $this->get_banner_status_html($options, $key); ?>
-                                    </div>
-                                    <a href="#" class="button button-secondary fcm-go-to-tab" data-target="#tab-<?php echo esc_attr($key); ?>">Configurar</a>
-                                </div>
-                            <?php endforeach; ?>
+                        <?php 
+                        $all_funnels = [
+                            'topo' => [
+                                'id' => 'topo',
+                                'name' => $label_topo,
+                                'description' => 'Estágio inicial do funil (Atração e Descberta)',
+                                'post_types' => isset($options['topo_post_types']) ? (array)$options['topo_post_types'] : [],
+                                'is_default' => true
+                            ],
+                            'meio' => [
+                                'id' => 'meio',
+                                'name' => $label_meio,
+                                'description' => 'Estágio intermediário do funil (Consideração da Solução)',
+                                'post_types' => isset($options['meio_post_types']) ? (array)$options['meio_post_types'] : [],
+                                'is_default' => true
+                            ],
+                            'fundo' => [
+                                'id' => 'fundo',
+                                'name' => $label_fundo,
+                                'description' => 'Estágio final de conversão (Venda e Oferta)',
+                                'post_types' => isset($options['fundo_post_types']) ? (array)$options['fundo_post_types'] : [],
+                                'is_default' => true
+                            ]
+                        ];
+
+                        foreach ($custom_funnels as $cf_id => $cf) {
+                            $all_funnels[$cf_id] = [
+                                'id' => $cf_id,
+                                'name' => $cf['name'],
+                                'description' => !empty($cf['description']) ? $cf['description'] : 'Funil Personalizado',
+                                'post_types' => isset($cf['post_types']) ? (array)$cf['post_types'] : [],
+                                'is_default' => false
+                            ];
+                        }
+                        ?>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                            <div>
+                                <h2 style="font-size: 1.5em; margin:0; color:#1d2327;">Central de Banners & Funis</h2>
+                                <p class="description" style="margin:4px 0 0 0;">Gerencie os estágios de funil e crie novos funis personalizados para direcionar seus leitores.</p>
+                            </div>
+                            <div>
+                                <button type="button" class="button button-primary button-hero" id="fcm-open-add-funnel-modal" style="display:inline-flex; align-items:center; justify-content:center; gap:6px; height:38px; line-height:1; padding: 0 16px;">
+                                    <span class="dashicons dashicons-plus-alt" style="font-size:18px; width:18px; height:18px; line-height:1;"></span> Criar Novo Funil
+                                </button>
+                            </div>
                         </div>
 
-                        <div style="display: flex; gap: 20px; margin-top: 40px;">
-                            <div style="flex: 1;">
-                                <h3 style="margin-top: 0; font-size: 1.3em;">Banners Especiais (Override)</h3>
-                                <p class="description">Substituem os CTAs de funil em URLs específicas automaticamente.</p>
-                                <hr style="margin: 10px 0 20px 0;">
-                                <a href="#" class="button button-primary fcm-go-to-tab" data-target="#tab-custom-list">Gerenciar Banners de Override (<?php echo count($custom_banners); ?>)</a>
+                        <!-- LISTA DE FUNIS EM FORMATO DE TABELA ALINHADA -->
+                        <div class="fcm-funnels-section" style="margin-bottom:30px;">
+                            <table class="wp-list-table widefat striped" style="border: 1px solid #c3c4c7; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                <thead>
+                                    <tr>
+                                        <th style="font-weight:bold; font-size:13px; padding:12px 15px; background:#f6f7f7;">Funil / Descrição</th>
+                                        <th style="font-weight:bold; font-size:13px; padding:12px 15px; background:#f6f7f7; width:220px;">Status do Banner</th>
+                                        <th style="font-weight:bold; font-size:13px; padding:12px 15px; background:#f6f7f7; text-align:right; width:230px;">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($all_funnels as $f_id => $f): 
+                                        $status_html = $this->get_banner_status_html($options, $f_id);
+                                        $f_post_types = !empty($f['post_types']) ? $f['post_types'] : ['Padrão Global'];
+                                    ?>
+                                        <tr>
+                                            <td style="padding:14px 15px; vertical-align:middle;">
+                                                <div style="display:flex; align-items:center; gap:8px;">
+                                                    <strong style="font-size:15px; color:#1d2327;"><?php echo esc_html($f['name']); ?></strong>
+                                                    <?php if ($f['is_default']): ?>
+                                                        <span style="background:#e7f3ff; color:#0c5460; font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600;">Estágio Padrão</span>
+                                                    <?php else: ?>
+                                                        <span style="background:#e2e3e5; color:#383d41; font-size:11px; padding:2px 8px; border-radius:12px; font-weight:600;">Personalizado</span>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div style="font-size:12px; color:#646970; margin-top:4px;"><?php echo esc_html($f['description']); ?></div>
+                                                <div style="margin-top:6px; font-size:11px; color:#50575e;">
+                                                    <strong>Tipos de Post:</strong> 
+                                                    <?php foreach ((array)$f_post_types as $pt): ?>
+                                                        <span style="background:#f0f0f1; padding:2px 6px; border-radius:4px; border:1px solid #dcdcde; margin-right:4px; font-family:monospace;"><?php echo esc_html($pt); ?></span>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            </td>
+                                            <td style="padding:14px 15px; vertical-align:middle; font-size:13px;">
+                                                <?php echo $status_html; ?>
+                                            </td>
+                                            <td style="padding:14px 15px; vertical-align:middle; text-align:right;">
+                                                <div style="display:inline-flex; gap:6px; align-items:center; justify-content:flex-end;">
+                                                    <a href="#" class="button button-primary fcm-go-to-tab" data-target="#tab-<?php echo esc_attr($f_id); ?>" style="display:inline-flex; align-items:center; gap:4px; height:30px; line-height:1; padding: 0 10px;">
+                                                        <span class="dashicons dashicons-admin-generic" style="font-size:16px; width:16px; height:16px; line-height:1;"></span> Configurar Banner
+                                                    </a>
+                                                    <?php if (!$f['is_default']): ?>
+                                                        <button type="button" class="button btn-edit-custom-funnel" data-funnel='<?php echo esc_attr(json_encode($f)); ?>' title="Editar detalhes do funil" style="display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0;">
+                                                            <span class="dashicons dashicons-edit" style="font-size:16px; width:16px; height:16px; line-height:1;"></span>
+                                                        </button>
+                                                        <a href="<?php echo wp_nonce_url(admin_url('admin.php?page=funnel-cta&tab=dashboard&fcm_del_funnel=' . $f_id), 'del_funnel_' . $f_id); ?>" class="button" style="color:#b32d2e; border-color:#b32d2e; display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0;" onclick="return confirm('Deseja realmente excluir este funil personalizado?');" title="Excluir funil">
+                                                            <span class="dashicons dashicons-trash" style="font-size:16px; width:16px; height:16px; line-height:1;"></span>
+                                                        </a>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- GRID OUTROS BANNERS -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px;">
+                            <div style="border: 1px solid #c3c4c7; padding: 20px; border-radius: 8px; background: #fff; text-align: center;">
+                                <h3 style="margin-top: 0; font-size: 1.2em; color: #2271b1;"><span class="dashicons dashicons-admin-site-alt3" style="vertical-align:middle;"></span> Banner Global</h3>
+                                <p class="description" style="font-size:12px;">Aparece em todos os conteúdos selecionados.</p>
+                                <div style="margin: 15px 0; font-size: 14px;"><?php echo $this->get_banner_status_html($options, 'global'); ?></div>
+                                <a href="#" class="button button-secondary fcm-go-to-tab" data-target="#tab-global">Configurar Global</a>
                             </div>
-                            <div style="flex: 1;">
-                                <h3 style="margin-top: 0; font-size: 1.3em;">Banners Especiais (Shortcodes)</h3>
-                                <p class="description">Banners independentes que podem ser colados em qualquer lugar pelo shortcode.</p>
-                                <hr style="margin: 10px 0 20px 0;">
-                                <a href="#" class="button button-primary fcm-go-to-tab" data-target="#tab-shortcode-list">Gerenciar Banners Shortcode (<?php echo count($shortcode_banners); ?>)</a>
+
+                            <div style="border: 1px solid #c3c4c7; padding: 20px; border-radius: 8px; background: #fff; text-align: center;">
+                                <h3 style="margin-top: 0; font-size: 1.2em; color: #2271b1;"><span class="dashicons dashicons-format-image" style="vertical-align:middle;"></span> Imagem Padrão (Fallback)</h3>
+                                <p class="description" style="font-size:12px;">Banner de contingência se o post não tiver funil definido.</p>
+                                <div style="margin: 15px 0; font-size: 14px;"><?php echo $this->get_banner_status_html($options, 'padrao'); ?></div>
+                                <a href="#" class="button button-secondary fcm-go-to-tab" data-target="#tab-padrao">Configurar Padrão</a>
+                            </div>
+
+                            <div style="border: 1px solid #c3c4c7; padding: 20px; border-radius: 8px; background: #fff; text-align: center;">
+                                <h3 style="margin-top: 0; font-size: 1.2em; color: #0c5460;"><span class="dashicons dashicons-randomize" style="vertical-align:middle;"></span> Banners de Override</h3>
+                                <p class="description" style="font-size:12px;">Substituem CTAs em URLs específicas.</p>
+                                <div style="margin: 15px 0; font-size: 14px; font-weight:bold; color:#0c5460;"><?php echo count($custom_banners); ?> ativos</div>
+                                <a href="#" class="button button-primary fcm-go-to-tab" data-target="#tab-custom-list">Gerenciar Overrides</a>
+                            </div>
+
+                            <div style="border: 1px solid #c3c4c7; padding: 20px; border-radius: 8px; background: #fff; text-align: center;">
+                                <h3 style="margin-top: 0; font-size: 1.2em; color: #004d40;"><span class="dashicons dashicons-shortcode" style="vertical-align:middle;"></span> Banners Shortcode</h3>
+                                <p class="description" style="font-size:12px;">Exibição por shortcode manual em conteúdos.</p>
+                                <div style="margin: 15px 0; font-size: 14px; font-weight:bold; color:#004d40;"><?php echo count($shortcode_banners); ?> criados</div>
+                                <a href="#" class="button button-primary fcm-go-to-tab" data-target="#tab-shortcode-list">Gerenciar Shortcodes</a>
                             </div>
                         </div>
                     </div>
@@ -654,6 +823,23 @@ class FunnelCTAManager {
                         </div>
 
                         <table class="form-table">
+                            <tr>
+                                <th scope="row"><label><strong>Tipos de Post Alvo (Filtro por Funil)</strong></label></th>
+                                <td>
+                                    <?php 
+                                    $stage_pts = isset($options[$key . '_post_types']) ? (array)$options[$key . '_post_types'] : [];
+                                    $public_pts_stage = get_post_types(['public' => true], 'objects');
+                                    foreach ($public_pts_stage as $pt_slug => $pt_obj):
+                                        if ($pt_slug === 'attachment') continue;
+                                    ?>
+                                        <label style="display:inline-block; margin-right:15px; margin-bottom:5px; font-weight:normal;">
+                                            <input type="checkbox" name="fcm_settings[<?php echo esc_attr($key); ?>_post_types][]" value="<?php echo esc_attr($pt_slug); ?>" <?php checked(in_array($pt_slug, $stage_pts)); ?>>
+                                            <?php echo esc_html($pt_obj->labels->singular_name ?: $pt_slug); ?> (<code><?php echo esc_html($pt_slug); ?></code>)
+                                        </label>
+                                    <?php endforeach; ?>
+                                    <p class="description">Se nenhum for selecionado, este funil aceitará os Tipos de Post definidos nas Configurações Avançadas.</p>
+                                </td>
+                            </tr>
                             <?php if ($key === 'global'): ?>
                             <tr>
                                 <th scope="row"><label for="fcm_global_allow_multiple"><strong>Exibição Simultânea</strong></label></th>
@@ -747,6 +933,23 @@ class FunnelCTAManager {
                     <hr style="margin: 20px 0;">
                     
                     <table class="form-table">
+                        <tr>
+                            <th scope="row"><label>Tipos de Post Habilitados Globalmente</label></th>
+                            <td>
+                                <?php 
+                                $enabled_pts = isset($options['enabled_post_types']) ? (array)$options['enabled_post_types'] : ['post'];
+                                $public_pts_adv = get_post_types(['public' => true], 'objects');
+                                foreach ($public_pts_adv as $pt_slug => $pt_obj):
+                                    if ($pt_slug === 'attachment') continue;
+                                ?>
+                                    <label style="display:block; margin-bottom:6px; font-weight:600;">
+                                        <input type="checkbox" name="fcm_settings[enabled_post_types][]" value="<?php echo esc_attr($pt_slug); ?>" <?php checked(in_array($pt_slug, $enabled_pts)); ?>>
+                                        <?php echo esc_html($pt_obj->labels->name ?: $pt_slug); ?> (<code><?php echo esc_html($pt_slug); ?></code>)
+                                    </label>
+                                <?php endforeach; ?>
+                                <p class="description">Marque os tipos de post no WordPress em que o plugin injetará banners automaticamente e exibirá a caixa de classificação.</p>
+                            </td>
+                        </tr>
                         <tr>
                             <th scope="row"><label>Nomes dos Estágios no Editor</label></th>
                             <td>
@@ -1253,19 +1456,13 @@ class FunnelCTAManager {
                         <div style="display: flex; gap: 20px;">
                             <div style="flex: 1; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
                                 <h4 style="margin-top: 0; margin-bottom: 10px;">Mapeamento de Nomes na Planilha</h4>
-                                <p class="description" style="margin-bottom: 15px;">Se a sua planilha não usa exatamente "topo", "meio" e "fundo", digite abaixo quais nomes ela usa para que o importador os reconheça.</p>
-                                <div style="margin-bottom: 10px; display:flex; align-items:center;">
-                                    <label style="width: 80px; font-weight: bold;">Topo =</label>
-                                    <input type="text" id="fcm-map-topo" class="regular-text" placeholder="Ex: topo" value="topo">
-                                </div>
-                                <div style="margin-bottom: 10px; display:flex; align-items:center;">
-                                    <label style="width: 80px; font-weight: bold;">Meio =</label>
-                                    <input type="text" id="fcm-map-meio" class="regular-text" placeholder="Ex: meio" value="meio">
-                                </div>
-                                <div style="display:flex; align-items:center;">
-                                    <label style="width: 80px; font-weight: bold;">Fundo =</label>
-                                    <input type="text" id="fcm-map-fundo" class="regular-text" placeholder="Ex: fundo" value="fundo">
-                                </div>
+                                <p class="description" style="margin-bottom: 15px;">Defina os termos usados na planilha CSV para corresponder aos funis cadastrados:</p>
+                                <?php foreach ($all_funnels as $f_id => $f): ?>
+                                    <div style="margin-bottom: 8px; display:flex; align-items:center; gap:10px;">
+                                        <label style="width: 140px; font-weight: bold; font-size:12px;"><?php echo esc_html($f['name']); ?> =</label>
+                                        <input type="text" data-funnel-key="<?php echo esc_attr($f_id); ?>" class="regular-text fcm-map-funnel-input" placeholder="Ex: <?php echo esc_attr($f_id); ?>" value="<?php echo esc_attr($f_id); ?>" style="flex:1;">
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
                             <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
                                 <label style="display:block; font-weight:bold; margin-bottom:10px;">Selecione o Arquivo CSV:</label>
@@ -1304,8 +1501,9 @@ class FunnelCTAManager {
                             </thead>
                             <tbody>
                                 <?php
+                                $enabled_pts_list = isset($options['enabled_post_types']) ? (array)$options['enabled_post_types'] : ['post'];
                                 $classified_posts = new WP_Query([
-                                    'post_type'      => 'post',
+                                    'post_type'      => $enabled_pts_list,
                                     'posts_per_page' => -1,
                                     'post_status'    => 'any',
                                     'meta_query'     => [['key' => '_fcm_stage', 'compare' => 'EXISTS']]
@@ -1399,7 +1597,49 @@ class FunnelCTAManager {
                 </div>
             </div>
         </div>
-        
+
+        <!-- MODAL DE CRIAR / EDITAR FUNIL -->
+        <div id="fcm-funnel-modal-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:99999; justify-content:center; align-items:center;">
+            <div style="background:#fff; width:100%; max-width:550px; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.2); overflow:hidden;">
+                <div style="background:#f6f7f7; padding:15px 20px; border-bottom:1px solid #c3c4c7; display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0; font-size:16px;" id="fcm-funnel-modal-title">Criar Novo Funil</h3>
+                    <button type="button" id="fcm-close-funnel-modal" style="background:none; border:none; cursor:pointer; font-size:20px; color:#666;">&times;</button>
+                </div>
+                <form method="post" action="<?php echo admin_url('admin.php?page=funnel-cta&tab=dashboard'); ?>">
+                    <?php wp_nonce_field('fcm_save_funnel_action', 'fcm_funnel_nonce'); ?>
+                    <input type="hidden" name="fcm_save_funnel" value="1">
+                    <input type="hidden" name="funnel_id" id="modal_funnel_id" value="">
+                    <div style="padding:20px;">
+                        <div style="margin-bottom:15px;">
+                            <label style="display:block; font-weight:bold; margin-bottom:5px;">Nome do Funil:</label>
+                            <input type="text" name="funnel_name" id="modal_funnel_name" required class="widefat" placeholder="Ex: Funil Lançamento Ebook, Funil Black Friday">
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="display:block; font-weight:bold; margin-bottom:5px;">Descrição (Opcional):</label>
+                            <textarea name="funnel_description" id="modal_funnel_description" rows="2" class="widefat" placeholder="Ex: Para artigos focados no produto X"></textarea>
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="display:block; font-weight:bold; margin-bottom:5px;">Tipos de Post Alvo (Post Types):</label>
+                            <?php 
+                            $public_post_types = get_post_types(['public' => true], 'objects');
+                            foreach ($public_post_types as $pt_slug => $pt_obj): 
+                                if ($pt_slug === 'attachment') continue;
+                            ?>
+                                <label style="display:inline-block; margin-right:15px; margin-bottom:5px; font-weight:normal;">
+                                    <input type="checkbox" name="funnel_post_types[]" value="<?php echo esc_attr($pt_slug); ?>" class="modal-pt-cb" <?php checked($pt_slug === 'post'); ?>>
+                                    <?php echo esc_html($pt_obj->labels->singular_name ?: $pt_slug); ?> (<code><?php echo esc_html($pt_slug); ?></code>)
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <div style="background:#f6f7f7; padding:12px 20px; border-top:1px solid #c3c4c7; text-align:right;">
+                        <button type="button" class="button button-secondary" id="fcm-cancel-funnel-modal">Cancelar</button>
+                        <button type="submit" class="button button-primary">Salvar Funil</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <style>
             #fcm-search-results li { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #eee; }
             #fcm-search-results li:hover { background: #f0f0f1; }
@@ -1477,6 +1717,46 @@ class FunnelCTAManager {
         jQuery(document).ready(function($){
             var mainFormTabs = ['#tab-dashboard', '#tab-global', '#tab-topo', '#tab-meio', '#tab-fundo', '#tab-padrao', '#tab-advanced', '#tab-logs', '#tab-shortcode-list', '#tab-custom-list', '#tab-list'];
 
+            // Eventos do Modal de Funil
+            $('#fcm-open-add-funnel-modal').click(function(){
+                $('#fcm-funnel-modal-title').text('Criar Novo Funil');
+                $('#modal_funnel_id').val('');
+                $('#modal_funnel_name').val('');
+                $('#modal_funnel_description').val('');
+                $('.modal-pt-cb').prop('checked', false);
+                $('.modal-pt-cb[value="post"]').prop('checked', true);
+                $('#fcm-funnel-modal-overlay').css('display', 'flex');
+            });
+
+            $('#fcm-close-funnel-modal, #fcm-cancel-funnel-modal').click(function(){
+                $('#fcm-funnel-modal-overlay').hide();
+            });
+
+            $(document).on('click', '.btn-edit-custom-funnel', function(){
+                var f = $(this).data('funnel');
+                if(!f) return;
+                $('#fcm-funnel-modal-title').text('Editar Funil: ' + f.name);
+                $('#modal_funnel_id').val(f.id);
+                $('#modal_funnel_name').val(f.name);
+                $('#modal_funnel_description').val(f.description || '');
+                $('.modal-pt-cb').prop('checked', false);
+                if (f.post_types && Array.isArray(f.post_types)) {
+                    f.post_types.forEach(function(pt){
+                        $('.modal-pt-cb[value="' + pt + '"]').prop('checked', true);
+                    });
+                }
+                $('#fcm-funnel-modal-overlay').css('display', 'flex');
+            });
+
+            $('#fcm-main-form').on('submit', function() {
+                var activeTab = $('.nav-tab-active').attr('href');
+                if (activeTab) {
+                    var tabName = activeTab.replace('#tab-', '');
+                    var redirectUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?page=funnel-cta&tab=' + tabName + '&msg=saved';
+                    $(this).find('input[name="_wp_http_referer"]').val(redirectUrl);
+                }
+            });
+
             function switchTab(href) {
                 $('.nav-tab').removeClass('nav-tab-active');
                 
@@ -1494,7 +1774,12 @@ class FunnelCTAManager {
                 $('.tab-content').hide();
                 $(href).fadeIn('fast');
                 
-                if(mainFormTabs.includes(href)) {
+                if(mainFormTabs.includes(href) || href.indexOf('#tab-') === 0) {
+                    if (href !== '#tab-custom-edit' && href !== '#tab-shortcode-edit' && href !== '#tab-custom-list' && href !== '#tab-shortcode-list' && href !== '#tab-list' && href !== '#tab-logs') {
+                        $('#fcm-main-submit-btn').show();
+                    } else {
+                        $('#fcm-main-submit-btn').hide();
+                    }
                     $('#fcm-main-submit-btn').show();
                 } else {
                     $('#fcm-main-submit-btn').hide();
@@ -1512,6 +1797,7 @@ class FunnelCTAManager {
                 var tabName = href.replace('#tab-', '');
                 var newurl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?page=funnel-cta&tab=' + tabName;
                 window.history.pushState({path:newurl},'',newurl);
+                $('#fcm-main-form input[name="_wp_http_referer"]').val(newurl + '&msg=saved');
             }
 
             $('.nav-tab').click(function(e){
@@ -2354,7 +2640,9 @@ class FunnelCTAManager {
     public function handle_post_search() {
         if (!current_user_can('manage_options')) wp_die();
         $term = sanitize_text_field($_POST['term']);
-        $posts = get_posts(['s' => $term, 'post_type' => 'post', 'post_status' => 'publish', 'posts_per_page' => 10]);
+        $options = get_option($this->option_name);
+        $enabled_pts_search = isset($options['enabled_post_types']) ? (array)$options['enabled_post_types'] : ['post'];
+        $posts = get_posts(['s' => $term, 'post_type' => $enabled_pts_search, 'post_status' => 'publish', 'posts_per_page' => 10]);
         $results = [];
         foreach ($posts as $p) {
             $results[] = [
@@ -2372,7 +2660,23 @@ class FunnelCTAManager {
        2. META BOX & FUNIL PADRÃO
     ---------------------------------------------------------------------------- */
     public function add_funnel_meta_box() {
-        add_meta_box('fcm_meta_box', 'Estágio do Funil (CTA)', [$this, 'render_meta_box'], 'post', 'side', 'high');
+        $options = get_option($this->option_name, []);
+        $enabled_post_types = isset($options['enabled_post_types']) ? (array)$options['enabled_post_types'] : ['post'];
+
+        $custom_funnels = $this->get_custom_funnels();
+        foreach ($custom_funnels as $cf) {
+            if (!empty($cf['post_types']) && is_array($cf['post_types'])) {
+                foreach ($cf['post_types'] as $pt) {
+                    if (!in_array($pt, $enabled_post_types)) {
+                        $enabled_post_types[] = $pt;
+                    }
+                }
+            }
+        }
+
+        foreach ($enabled_post_types as $pt) {
+            add_meta_box('fcm_meta_box', 'Estágio do Funil (CTA)', [$this, 'render_meta_box'], $pt, 'side', 'high');
+        }
     }
 
     public function render_meta_box($post) {
@@ -2383,12 +2687,16 @@ class FunnelCTAManager {
         $label_topo = isset($options['label_topo']) && !empty($options['label_topo']) ? $options['label_topo'] : 'Topo de Funil';
         $label_meio = isset($options['label_meio']) && !empty($options['label_meio']) ? $options['label_meio'] : 'Meio de Funil';
         $label_fundo = isset($options['label_fundo']) && !empty($options['label_fundo']) ? $options['label_fundo'] : 'Fundo de Funil';
+        $custom_funnels = $this->get_custom_funnels();
         ?>
         <select name="fcm_stage" style="width:100%">
             <option value="">Padrão (Fallback Automático)</option>
             <option value="topo" <?php selected($value, 'topo'); ?>><?php echo esc_html($label_topo); ?></option>
             <option value="meio" <?php selected($value, 'meio'); ?>><?php echo esc_html($label_meio); ?></option>
             <option value="fundo" <?php selected($value, 'fundo'); ?>><?php echo esc_html($label_fundo); ?></option>
+            <?php foreach ($custom_funnels as $cf_id => $cf): ?>
+                <option value="<?php echo esc_attr($cf_id); ?>" <?php selected($value, $cf_id); ?>><?php echo esc_html($cf['name']); ?></option>
+            <?php endforeach; ?>
         </select>
         <p class="description" style="margin-top: 10px;">Atenção: Se este post estiver nas regras de um "Banner de Override", as configurações de funil acima serão ignoradas.</p>
         <?php
@@ -2404,7 +2712,6 @@ class FunnelCTAManager {
        3. LÓGICA DE INJEÇÃO (OVERRIDE CUSTOM BANNERS -> FUNIL -> POSICIONAMENTO)
     ---------------------------------------------------------------------------- */
     private function is_banner_active($options, $stage) {
-        if (empty($options[$stage])) return false;
         if (!empty($options[$stage . '_schedule'])) {
             $now = time();
             $start = !empty($options[$stage . '_start']) ? $this->get_utc_timestamp($options[$stage . '_start']) : 0;
@@ -2412,7 +2719,16 @@ class FunnelCTAManager {
             if ($start && $now < $start) return false;
             if ($end && $now > $end) return false;
         }
-        return true;
+
+        $static_desktop = ['type' => $options[$stage . '_type'] ?? 'image', 'image' => $options[$stage] ?? '', 'html' => $options[$stage . '_html'] ?? ''];
+        $static_mobile = ['type' => $options[$stage . '_type_mobile'] ?? 'image', 'image' => $options[$stage . '_mobile'] ?? '', 'html' => $options[$stage . '_html_mobile'] ?? ''];
+        $random_desktop = $options[$stage . '_random_desktop'] ?? [];
+        $random_mobile = $options[$stage . '_random_mobile'] ?? [];
+
+        $has_desktop = (!empty($options[$stage . '_desktop_disabled']) ? false : ($this->is_banner_valid($static_desktop) || !empty($random_desktop)));
+        $has_mobile = (!empty($options[$stage . '_mobile_disabled']) ? false : ($this->is_banner_valid($static_mobile) || !empty($random_mobile)));
+
+        return $has_desktop || $has_mobile;
     }
 
     private function is_banner_valid($b) {
@@ -2640,11 +2956,15 @@ class FunnelCTAManager {
     }
 
     public function inject_cta_via_js() {
-        if (!is_single()) return;
+        if (!is_singular()) return;
 
         $post_id = get_the_ID();
+        $post_type = get_post_type($post_id);
         $current_url = get_permalink($post_id);
         $options = get_option($this->option_name);
+
+        $enabled_post_types = isset($options['enabled_post_types']) ? (array)$options['enabled_post_types'] : ['post'];
+        if (!in_array($post_type, $enabled_post_types)) return;
         
         $final_banners = [];
         $override_blocks_others = false;
@@ -2703,8 +3023,11 @@ class FunnelCTAManager {
             $stage = get_post_meta($post_id, '_fcm_stage', true);
             $stage_to_use = null;
 
-            if ($stage && in_array($stage, ['topo', 'meio', 'fundo'])) {
-                if ($this->is_banner_active($options, $stage)) {
+            if ($stage) {
+                $stage_pts = isset($options[$stage . '_post_types']) ? (array)$options[$stage . '_post_types'] : [];
+                $pt_allowed = empty($stage_pts) || in_array($post_type, $stage_pts);
+
+                if ($pt_allowed && $this->is_banner_active($options, $stage)) {
                     $stage_to_use = $stage;
                 } else {
                     $default_status = isset($options['default_status']) ? $options['default_status'] : 'active';
@@ -3207,4 +3530,14 @@ class FunnelCTAManager {
 }
 
 new FunnelCTAManager();
-add_action('admin_init', function(){ register_setting('fcm_settings_group', 'fcm_settings'); });
+add_action('admin_init', function(){ 
+    register_setting('fcm_settings_group', 'fcm_settings', [
+        'sanitize_callback' => function($new_input) {
+            $old_input = get_option('fcm_settings', []);
+            if (is_array($old_input) && is_array($new_input)) {
+                return array_merge($old_input, $new_input);
+            }
+            return $new_input;
+        }
+    ]);
+});
