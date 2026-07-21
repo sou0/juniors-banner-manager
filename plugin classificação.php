@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Junior's banner manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 4.2
+ * Version: 4.3
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -43,6 +43,7 @@ class FunnelCTAManager {
         add_action('save_post', [$this, 'save_funnel_meta_box']);
 
         add_action('wp_footer', [$this, 'inject_cta_via_js']);
+        add_action('wp_head', [$this, 'output_custom_css']);
 
         add_action('wp_ajax_fcm_import_classified', [$this, 'handle_classified_import']);
         add_action('wp_ajax_fcm_get_post_by_url', [$this, 'handle_get_post_by_url']);
@@ -77,26 +78,41 @@ class FunnelCTAManager {
         }
     }
 
+    public function output_custom_css() {
+        $options = get_option($this->option_name);
+        if (!empty($options['custom_css'])) {
+            echo "\n<!-- Junior's Banner Manager Custom CSS -->\n";
+            echo "<style id=\"fcm-custom-css\">\n" . wp_strip_all_tags($options['custom_css']) . "\n</style>\n";
+        }
+    }
+
     private function render_banner_config_box($args) {
         $type = $args['type'] ?? 'image';
         $img_id = $args['img_id'] ?? '';
         $img_url = $img_id ? wp_get_attachment_url($img_id) : '';
         $url = $args['url'] ?? '';
         $html = $args['html'] ?? '';
+        $css_id = $args['css_id'] ?? '';
+        $css_class = $args['css_class'] ?? '';
         
         $type_name = $args['type_name'];
         $image_name = $args['image_name'];
         $url_name = $args['url_name'];
         $html_name = $args['html_name'];
+        $css_id_name = $args['css_id_name'] ?? '';
+        $css_class_name = $args['css_class_name'] ?? '';
 
         $title = $args['title'];
         $is_static = $args['is_static'] ?? false;
         $target_class = $args['target_class'] ?? ('fcm-fields-' . uniqid());
-        $id_prefix = $args['id_prefix'] ?? ''; // Novo parâmetro para IDs
+        $id_prefix = $args['id_prefix'] ?? '';
+
+        $css_id_field_id = $id_prefix ? ($id_prefix . '_css_id') : '';
+        $css_class_field_id = $id_prefix ? ($id_prefix . '_css_class') : '';
 
         ob_start();
         ?>
-        <div class="fcm-banner-box <?php echo $is_static ? 'fcm-static-box' : 'fcm-random-box'; ?>" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 420px; justify-content: flex-start;">
+        <div class="fcm-banner-box <?php echo $is_static ? 'fcm-static-box' : 'fcm-random-box'; ?>" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 460px; justify-content: flex-start;">
             <?php if (!$is_static): ?>
                 <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover este banner">
                     <span class="dashicons dashicons-no-alt"></span>
@@ -131,6 +147,17 @@ class FunnelCTAManager {
             <div class="<?php echo esc_attr($target_class); ?> fcm-type-field-html" style="display: <?php echo $type === 'html' ? 'block' : 'none'; ?>; flex-grow: 1;">
                 <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
                 <textarea name="<?php echo esc_attr($html_name); ?>" id="<?php echo $id_prefix ? esc_attr($id_prefix . '_html') : ''; ?>" rows="8" style="width:100%; font-family:monospace; height: 250px;"><?php echo esc_textarea($html); ?></textarea>
+            </div>
+
+            <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px; display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label style="display:block; font-weight:600; font-size:11px;">ID HTML (CSS ID):</label>
+                    <input type="text" name="<?php echo esc_attr($css_id_name ?: $type_name . '_css_id'); ?>" id="<?php echo esc_attr($css_id_field_id); ?>" value="<?php echo esc_attr($css_id); ?>" class="fcm-css-id-input" style="width:100%; font-family:monospace;" placeholder="Ex: meu-banner">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display:block; font-weight:600; font-size:11px;">Classe HTML (CSS Class):</label>
+                    <input type="text" name="<?php echo esc_attr($css_class_name ?: $type_name . '_css_class'); ?>" id="<?php echo esc_attr($css_class_field_id); ?>" value="<?php echo esc_attr($css_class); ?>" class="fcm-css-class-input" style="width:100%; font-family:monospace;" placeholder="Ex: banner-topo cta">
+                </div>
             </div>
         </div>
         <?php
@@ -308,7 +335,9 @@ class FunnelCTAManager {
                         'type' => sanitize_text_field($rb['type'] ?? 'image'),
                         'image' => sanitize_text_field($rb['image'] ?? ''),
                         'url' => sanitize_text_field($rb['url'] ?? ''),
-                        'html' => wp_unslash($rb['html'] ?? '')
+                        'html' => wp_unslash($rb['html'] ?? ''),
+                        'css_id' => sanitize_text_field($rb['css_id'] ?? ''),
+                        'css_class' => sanitize_text_field($rb['css_class'] ?? '')
                     ];
                 }
             }
@@ -320,7 +349,9 @@ class FunnelCTAManager {
                         'type' => sanitize_text_field($rb['type'] ?? 'image'),
                         'image' => sanitize_text_field($rb['image'] ?? ''),
                         'url' => sanitize_text_field($rb['url'] ?? ''),
-                        'html' => wp_unslash($rb['html'] ?? '')
+                        'html' => wp_unslash($rb['html'] ?? ''),
+                        'css_id' => sanitize_text_field($rb['css_id'] ?? ''),
+                        'css_class' => sanitize_text_field($rb['css_class'] ?? '')
                     ];
                 }
             }
@@ -336,6 +367,10 @@ class FunnelCTAManager {
                 'url_mobile' => isset($_POST['cb_url_mobile']) ? sanitize_text_field($_POST['cb_url_mobile']) : '',
                 'html' => wp_unslash($_POST['cb_html']), 
                 'html_mobile' => isset($_POST['cb_html_mobile']) ? wp_unslash($_POST['cb_html_mobile']) : '', 
+                'css_id' => isset($_POST['cb_css_id']) ? sanitize_text_field($_POST['cb_css_id']) : '',
+                'css_class' => isset($_POST['cb_css_class']) ? sanitize_text_field($_POST['cb_css_class']) : '',
+                'css_id_mobile' => isset($_POST['cb_css_id_mobile']) ? sanitize_text_field($_POST['cb_css_id_mobile']) : '',
+                'css_class_mobile' => isset($_POST['cb_css_class_mobile']) ? sanitize_text_field($_POST['cb_css_class_mobile']) : '',
                 'random_desktop' => $random_desktop,
                 'random_mobile' => $random_mobile,
                 'desktop_disabled' => isset($_POST['cb_desktop_disabled']) ? 1 : 0,
@@ -371,7 +406,7 @@ class FunnelCTAManager {
     public function handle_shortcode_banner_save() {
         if (!current_user_can('manage_options')) return;
 
-        if (isset($_POST['fcm_save_shortcode']) && isset($_POST['fcm_shortcode_nonce']) && wp_verify_nonce($_POST['fcm_shortcode_nonce'], 'fcm_save_shortcode_action')) {
+        if ((isset($_POST['fcm_save_shortcode']) || isset($_POST['scb_save_shortcode'])) && isset($_POST['fcm_shortcode_nonce']) && wp_verify_nonce($_POST['fcm_shortcode_nonce'], 'fcm_save_shortcode_action')) {
             $banners = get_option($this->shortcode_banners_option, []);
             $id = !empty($_POST['scb_id']) ? sanitize_text_field($_POST['scb_id']) : 'scb_' . time();
             
@@ -382,7 +417,9 @@ class FunnelCTAManager {
                         'type' => sanitize_text_field($rb['type'] ?? 'image'),
                         'image' => sanitize_text_field($rb['image'] ?? ''),
                         'url' => sanitize_text_field($rb['url'] ?? ''),
-                        'html' => wp_unslash($rb['html'] ?? '')
+                        'html' => wp_unslash($rb['html'] ?? ''),
+                        'css_id' => sanitize_text_field($rb['css_id'] ?? ''),
+                        'css_class' => sanitize_text_field($rb['css_class'] ?? '')
                     ];
                 }
             }
@@ -394,7 +431,9 @@ class FunnelCTAManager {
                         'type' => sanitize_text_field($rb['type'] ?? 'image'),
                         'image' => sanitize_text_field($rb['image'] ?? ''),
                         'url' => sanitize_text_field($rb['url'] ?? ''),
-                        'html' => wp_unslash($rb['html'] ?? '')
+                        'html' => wp_unslash($rb['html'] ?? ''),
+                        'css_id' => sanitize_text_field($rb['css_id'] ?? ''),
+                        'css_class' => sanitize_text_field($rb['css_class'] ?? '')
                     ];
                 }
             }
@@ -410,6 +449,10 @@ class FunnelCTAManager {
                 'url_mobile' => isset($_POST['scb_url_mobile']) ? sanitize_text_field($_POST['scb_url_mobile']) : '',
                 'html' => wp_unslash($_POST['scb_html']), 
                 'html_mobile' => isset($_POST['scb_html_mobile']) ? wp_unslash($_POST['scb_html_mobile']) : '', 
+                'css_id' => isset($_POST['scb_css_id']) ? sanitize_text_field($_POST['scb_css_id']) : '',
+                'css_class' => isset($_POST['scb_css_class']) ? sanitize_text_field($_POST['scb_css_class']) : '',
+                'css_id_mobile' => isset($_POST['scb_css_id_mobile']) ? sanitize_text_field($_POST['scb_css_id_mobile']) : '',
+                'css_class_mobile' => isset($_POST['scb_css_class_mobile']) ? sanitize_text_field($_POST['scb_css_class_mobile']) : '',
                 'random_desktop' => $random_desktop,
                 'random_mobile' => $random_mobile,
                 'desktop_disabled' => isset($_POST['scb_desktop_disabled']) ? 1 : 0,
@@ -506,7 +549,7 @@ class FunnelCTAManager {
         }
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.2</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.3</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
@@ -537,46 +580,46 @@ class FunnelCTAManager {
             <div class="fcm-content-wrapper" style="background: #fff; padding: 20px; border: 1px solid #ccc; border-top: none; min-height: 500px;">
                 
                 <!-- START: MAIN OPTIONS FORM -->
+                <?php 
+                $all_funnels = [
+                    'topo' => [
+                        'id' => 'topo',
+                        'name' => $label_topo,
+                        'description' => 'Estágio inicial do funil (Atração e Descberta)',
+                        'post_types' => isset($options['topo_post_types']) ? (array)$options['topo_post_types'] : [],
+                        'is_default' => true
+                    ],
+                    'meio' => [
+                        'id' => 'meio',
+                        'name' => $label_meio,
+                        'description' => 'Estágio intermediário do funil (Consideração da Solução)',
+                        'post_types' => isset($options['meio_post_types']) ? (array)$options['meio_post_types'] : [],
+                        'is_default' => true
+                    ],
+                    'fundo' => [
+                        'id' => 'fundo',
+                        'name' => $label_fundo,
+                        'description' => 'Estágio final de conversão (Venda e Oferta)',
+                        'post_types' => isset($options['fundo_post_types']) ? (array)$options['fundo_post_types'] : [],
+                        'is_default' => true
+                    ]
+                ];
+
+                foreach ($custom_funnels as $cf_id => $cf) {
+                    $all_funnels[$cf_id] = [
+                        'id' => $cf_id,
+                        'name' => $cf['name'],
+                        'description' => !empty($cf['description']) ? $cf['description'] : 'Funil Personalizado',
+                        'post_types' => isset($cf['post_types']) ? (array)$cf['post_types'] : [],
+                        'is_default' => false
+                    ];
+                }
+                ?>
                 <form method="post" action="options.php" id="fcm-main-form">
                     <?php settings_fields('fcm_settings_group'); ?>
                     
                     <!-- TAB: Dashboard Central -->
                     <div id="tab-dashboard" class="tab-content" style="display: <?php echo $active_tab === 'dashboard' ? 'block' : 'none'; ?>;">
-                        <?php 
-                        $all_funnels = [
-                            'topo' => [
-                                'id' => 'topo',
-                                'name' => $label_topo,
-                                'description' => 'Estágio inicial do funil (Atração e Descberta)',
-                                'post_types' => isset($options['topo_post_types']) ? (array)$options['topo_post_types'] : [],
-                                'is_default' => true
-                            ],
-                            'meio' => [
-                                'id' => 'meio',
-                                'name' => $label_meio,
-                                'description' => 'Estágio intermediário do funil (Consideração da Solução)',
-                                'post_types' => isset($options['meio_post_types']) ? (array)$options['meio_post_types'] : [],
-                                'is_default' => true
-                            ],
-                            'fundo' => [
-                                'id' => 'fundo',
-                                'name' => $label_fundo,
-                                'description' => 'Estágio final de conversão (Venda e Oferta)',
-                                'post_types' => isset($options['fundo_post_types']) ? (array)$options['fundo_post_types'] : [],
-                                'is_default' => true
-                            ]
-                        ];
-
-                        foreach ($custom_funnels as $cf_id => $cf) {
-                            $all_funnels[$cf_id] = [
-                                'id' => $cf_id,
-                                'name' => $cf['name'],
-                                'description' => !empty($cf['description']) ? $cf['description'] : 'Funil Personalizado',
-                                'post_types' => isset($cf['post_types']) ? (array)$cf['post_types'] : [],
-                                'is_default' => false
-                            ];
-                        }
-                        ?>
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
                             <div>
                                 <h2 style="font-size: 1.5em; margin:0; color:#1d2327;">Central de Banners & Funis</h2>
@@ -734,10 +777,14 @@ class FunnelCTAManager {
                                     'img_id' => $img_id,
                                     'url' => $link_url,
                                     'html' => $html_content,
+                                    'css_id' => $options[$key . '_css_id'] ?? '',
+                                    'css_class' => $options[$key . '_css_class'] ?? '',
                                     'type_name' => "fcm_settings[{$key}_type]",
                                     'image_name' => "fcm_settings[{$key}]",
                                     'url_name' => "fcm_settings[{$key}_url]",
                                     'html_name' => "fcm_settings[{$key}_html]",
+                                    'css_id_name' => "fcm_settings[{$key}_css_id]",
+                                    'css_class_name' => "fcm_settings[{$key}_css_class]",
                                     'target_class' => "fcm-desktop-fields-{$key}-static"
                                 ]); 
                                 ?>
@@ -754,10 +801,14 @@ class FunnelCTAManager {
                                             'img_id' => $rb['image'] ?? '',
                                             'url' => $rb['url'] ?? '',
                                             'html' => $rb['html'] ?? '',
+                                            'css_id' => $rb['css_id'] ?? '',
+                                            'css_class' => $rb['css_class'] ?? '',
                                             'type_name' => "fcm_settings[{$key}_random_desktop][{$idx}][type]",
                                             'image_name' => "fcm_settings[{$key}_random_desktop][{$idx}][image]",
                                             'url_name' => "fcm_settings[{$key}_random_desktop][{$idx}][url]",
                                             'html_name' => "fcm_settings[{$key}_random_desktop][{$idx}][html]",
+                                            'css_id_name' => "fcm_settings[{$key}_random_desktop][{$idx}][css_id]",
+                                            'css_class_name' => "fcm_settings[{$key}_random_desktop][{$idx}][css_class]",
                                             'target_class' => "fcm-desktop-fields-{$key}-random-{$idx}"
                                         ]);
                                     endforeach;
@@ -786,10 +837,14 @@ class FunnelCTAManager {
                                     'img_id' => $img_mobile_id,
                                     'url' => $link_mobile_url,
                                     'html' => $html_mobile_content,
+                                    'css_id' => $options[$key . '_css_id_mobile'] ?? '',
+                                    'css_class' => $options[$key . '_css_class_mobile'] ?? '',
                                     'type_name' => "fcm_settings[{$key}_type_mobile]",
                                     'image_name' => "fcm_settings[{$key}_mobile]",
                                     'url_name' => "fcm_settings[{$key}_url_mobile]",
                                     'html_name' => "fcm_settings[{$key}_html_mobile]",
+                                    'css_id_name' => "fcm_settings[{$key}_css_id_mobile]",
+                                    'css_class_name' => "fcm_settings[{$key}_css_class_mobile]",
                                     'target_class' => "fcm-mobile-fields-{$key}-static"
                                 ]); 
                                 ?>
@@ -806,10 +861,14 @@ class FunnelCTAManager {
                                             'img_id' => $rb['image'] ?? '',
                                             'url' => $rb['url'] ?? '',
                                             'html' => $rb['html'] ?? '',
+                                            'css_id' => $rb['css_id'] ?? '',
+                                            'css_class' => $rb['css_class'] ?? '',
                                             'type_name' => "fcm_settings[{$key}_random_mobile][{$idx}][type]",
                                             'image_name' => "fcm_settings[{$key}_random_mobile][{$idx}][image]",
                                             'url_name' => "fcm_settings[{$key}_random_mobile][{$idx}][url]",
                                             'html_name' => "fcm_settings[{$key}_random_mobile][{$idx}][html]",
+                                            'css_id_name' => "fcm_settings[{$key}_random_mobile][{$idx}][css_id]",
+                                            'css_class_name' => "fcm_settings[{$key}_random_mobile][{$idx}][css_class]",
                                             'target_class' => "fcm-mobile-fields-{$key}-random-{$idx}"
                                         ]);
                                     endforeach;
@@ -975,6 +1034,13 @@ class FunnelCTAManager {
                                 <p class="description">Se o plugin não conseguir encontrar automaticamente o texto do seu post, adicione aqui a Classe CSS ou ID da caixa de texto principal.<br><strong>Um seletor por linha.</strong> Ex: <code>.conteudo-do-meu-tema</code> ou <code>#box-artigo</code></p>
                             </td>
                         </tr>
+                        <tr>
+                            <th scope="row"><label for="fcm_custom_css">Estilos CSS Personalizados (Global)</label></th>
+                            <td>
+                                <textarea name="fcm_settings[custom_css]" id="fcm_custom_css" rows="6" class="large-text code" style="font-family: monospace;" placeholder="/* Adicione seu CSS personalizado aqui */&#10;.fcm-cta-container { margin-bottom: 30px; }&#10;#meu-banner-destaque { border: 2px solid #00a0d2; }"><?php echo esc_textarea(isset($options['custom_css']) ? $options['custom_css'] : ''); ?></textarea>
+                                <p class="description">Estilos CSS personalizados inseridos aqui serão impressos automaticamente no <code>&lt;head&gt;</code> de todas as páginas do site onde houver banners.</p>
+                            </td>
+                        </tr>
                     </table>
                 </div>
 
@@ -1093,6 +1159,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'cb_image',
                                                     'url_name' => 'cb_url',
                                                     'html_name' => 'cb_html',
+                                                    'css_id_name' => 'cb_css_id',
+                                                    'css_class_name' => 'cb_css_class',
                                                     'target_class' => 'cb-desktop-fields',
                                                     'id_prefix' => 'cb_image'
                                                 ]); 
@@ -1123,6 +1191,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'cb_image_mobile',
                                                     'url_name' => 'cb_url_mobile',
                                                     'html_name' => 'cb_html_mobile',
+                                                    'css_id_name' => 'cb_css_id_mobile',
+                                                    'css_class_name' => 'cb_css_class_mobile',
                                                     'target_class' => 'cb-mobile-fields',
                                                     'id_prefix' => 'cb_image_mobile'
                                                 ]); 
@@ -1297,7 +1367,7 @@ class FunnelCTAManager {
 
                     <form method="post" action="<?php echo admin_url('admin.php?page=funnel-cta&tab=shortcode-list'); ?>">
                         <?php wp_nonce_field('fcm_save_shortcode_action', 'fcm_shortcode_nonce'); ?>
-                        <input type="hidden" name="fcm_save_shortcode" value="1">
+                        <input type="hidden" name="scb_save_shortcode" value="1">
                         <input type="hidden" name="scb_id" id="scb_id" value="">
 
                         <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; margin-bottom: 20px;">
@@ -1340,6 +1410,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'scb_image',
                                                     'url_name' => 'scb_url',
                                                     'html_name' => 'scb_html',
+                                                    'css_id_name' => 'scb_css_id',
+                                                    'css_class_name' => 'scb_css_class',
                                                     'target_class' => 'scb-desktop-fields',
                                                     'id_prefix' => 'scb_image'
                                                 ]); 
@@ -1370,6 +1442,8 @@ class FunnelCTAManager {
                                                     'image_name' => 'scb_image_mobile',
                                                     'url_name' => 'scb_url_mobile',
                                                     'html_name' => 'scb_html_mobile',
+                                                    'css_id_name' => 'scb_css_id_mobile',
+                                                    'css_class_name' => 'scb_css_class_mobile',
                                                     'target_class' => 'scb-mobile-fields',
                                                     'id_prefix' => 'scb_image_mobile'
                                                 ]); 
@@ -1444,33 +1518,80 @@ class FunnelCTAManager {
                     </div>
                     <p class="description">Gerencie todos os posts que possuem um estágio do funil definido. Você pode remover posts em massa ou alterar suas posições individualmente.</p>
                     
-                    <!-- Painel Expansível de Importação -->
+                    <!-- Painel Expansível de Importação em Massa -->
                     <div id="fcm-import-classified-panel" style="display:none; margin-top: 15px; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; box-shadow: 0 1px 1px rgba(0,0,0,.04);">
                         <h3 style="margin-top:0; font-size: 1.1em;">Importação em Massa via CSV</h3>
-                        <div style="background: #f8f9fa; border-left: 4px solid #00a0d2; padding: 15px; margin-bottom: 20px;">
-                            <strong>Estrutura da Planilha:</strong> O CSV não deve ter cabeçalho. As colunas devem ser:<br>
-                            <code>Coluna A:</code> URL Completa ou Slug do Post<br>
-                            <code>Coluna B:</code> Estágio (qualquer texto que você mapear abaixo)
+                        <div style="background: #f8f9fa; border-left: 4px solid #00a0d2; padding: 12px 15px; margin-bottom: 20px;">
+                            <strong>Estrutura da Planilha:</strong> O CSV deve conter:<br>
+                            <code>Coluna A:</code> URL Completa, Slug ou ID do Post &nbsp;|&nbsp; <code>Coluna B:</code> Nome ou Estágio do Funil
                         </div>
 
-                        <div style="display: flex; gap: 20px;">
-                            <div style="flex: 1; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-                                <h4 style="margin-top: 0; margin-bottom: 10px;">Mapeamento de Nomes na Planilha</h4>
-                                <p class="description" style="margin-bottom: 15px;">Defina os termos usados na planilha CSV para corresponder aos funis cadastrados:</p>
-                                <?php foreach ($all_funnels as $f_id => $f): ?>
-                                    <div style="margin-bottom: 8px; display:flex; align-items:center; gap:10px;">
-                                        <label style="width: 140px; font-weight: bold; font-size:12px;"><?php echo esc_html($f['name']); ?> =</label>
-                                        <input type="text" data-funnel-key="<?php echo esc_attr($f_id); ?>" class="regular-text fcm-map-funnel-input" placeholder="Ex: <?php echo esc_attr($f_id); ?>" value="<?php echo esc_attr($f_id); ?>" style="flex:1;">
-                                    </div>
-                                <?php endforeach; ?>
+                        <!-- PASSO 1: SELEÇÃO DO ARQUIVO -->
+                        <div id="fcm-import-step-1" style="background: #f9f9f9; padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 15px;">
+                            <label style="display:block; font-weight:bold; margin-bottom:10px;">1. Selecione o Arquivo CSV:</label>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <input type="file" id="fcm-csv-classified-file" accept=".csv" style="flex:1;">
+                                <button type="button" class="button button-primary" id="btn-advance-to-step-2">Avançar para Mapeamento →</button>
+                                <button type="button" class="button" id="btn-cancel-import-panel">Cancelar</button>
                             </div>
-                            <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
-                                <label style="display:block; font-weight:bold; margin-bottom:10px;">Selecione o Arquivo CSV:</label>
-                                <input type="file" id="fcm-csv-classified-file" accept=".csv" style="margin-bottom: 15px;">
-                                <div>
-                                    <button type="button" class="button button-primary" id="btn-run-classified-import">Processar Planilha</button>
-                                    <button type="button" class="button" id="btn-cancel-import-panel">Cancelar</button>
+                        </div>
+
+                        <!-- PASSO 2: MAPEAMENTO DOS ITENS ENCONTRADOS -->
+                        <div id="fcm-import-step-2" style="display:none; background: #fff; border: 1px solid #ccd0d4; padding: 15px; border-radius: 4px; margin-bottom: 15px;">
+                            <h4 style="margin-top: 0; margin-bottom: 5px;">2. Mapeamento de Funis (Itens da Coluna B)</h4>
+                            <p class="description" style="margin-bottom: 15px;">Abaixo estão os valores únicos detectados na Coluna B do seu CSV. Para cada um, selecione a qual Funil ele corresponde:</p>
+                            
+                            <table class="wp-list-table widefat fixed striped" style="margin-bottom: 15px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 40%;">Texto na Coluna B (CSV)</th>
+                                        <th style="width: 20%;">Ocorrências</th>
+                                        <th style="width: 40%;">Corresponder ao Funil</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fcm-csv-mapping-tbody">
+                                    <!-- Inserido via JS -->
+                                </tbody>
+                            </table>
+
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <button type="button" class="button" id="btn-back-to-step-1">← Escolher Outro Arquivo</button>
+                                <button type="button" class="button button-primary" id="btn-run-classified-import">Iniciar Importação</button>
+                            </div>
+                        </div>
+
+                        <!-- PROGRESSO DA IMPORTAÇÃO -->
+                        <div id="fcm-import-progress" style="display:none; padding: 15px; background: #eef9ff; border: 1px solid #bce1f7; border-radius: 4px; margin-bottom: 15px;">
+                            <span class="spinner is-active" style="float:left; margin:0 10px 0 0;"></span>
+                            <strong id="fcm-import-progress-text">Processando planilha e efetuando tentativas de correspondência...</strong>
+                        </div>
+
+                        <!-- PASSO 3: RESULTADOS E RETENTATIVAS -->
+                        <div id="fcm-import-step-3" style="display:none; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+                            <h4 style="margin-top: 0; margin-bottom: 10px;">3. Resultado da Importação</h4>
+                            
+                            <div id="fcm-import-summary-box" style="margin-bottom: 15px;"></div>
+
+                            <div id="fcm-import-failed-details" style="display:none; margin-bottom: 15px;">
+                                <h5 style="margin: 10px 0 5px 0; color: #d63638;">Posts que Não Puderam ser Localizados (Mesmo Após 3 Tentativas):</h5>
+                                <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ccd0d4; background: #fafafa;">
+                                    <table class="wp-list-table widefat fixed striped">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 15%;">Linha</th>
+                                                <th style="width: 50%;">URL / Slug / ID no CSV</th>
+                                                <th style="width: 35%;">Estágio no CSV</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="fcm-csv-failed-tbody"></tbody>
+                                    </table>
                                 </div>
+                            </div>
+
+                            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                <button type="button" class="button button-primary" id="btn-retry-failed-import" style="display:none;"><span class="dashicons dashicons-update" style="margin-top:4px;"></span> Tentar Novamente (Apenas Posts Falhos)</button>
+                                <button type="button" class="button" id="btn-download-failed-csv" style="display:none;"><span class="dashicons dashicons-download" style="margin-top:4px;"></span> Baixar CSV dos Falhados</button>
+                                <button type="button" class="button button-secondary" id="btn-finish-import">OK / Concluir</button>
                             </div>
                         </div>
                     </div>
@@ -1715,6 +1836,7 @@ class FunnelCTAManager {
 
         <script>
         jQuery(document).ready(function($){
+            var fcmAllFunnels = <?php echo json_encode(array_values($this->get_all_funnels())); ?>;
             var mainFormTabs = ['#tab-dashboard', '#tab-global', '#tab-topo', '#tab-meio', '#tab-fundo', '#tab-padrao', '#tab-advanced', '#tab-logs', '#tab-shortcode-list', '#tab-custom-list', '#tab-list'];
 
             // Eventos do Modal de Funil
@@ -1901,48 +2023,267 @@ class FunnelCTAManager {
             $('#btn-export-targets').click(function(){ exportToCSV('override_links.csv', '#table-target-links'); });
             $('#btn-export-overrides').click(function(){ exportToCSV('lista_completa_overrides.csv', '#table-overrides-banners'); });
 
-            // CSV Import
+            // CSV Import - 3 Steps Workflow
+            var currentCsvText = null;
+            var currentFailedItems = [];
+
             $('#btn-import-classified-trigger').click(function(){
                 $('#fcm-import-classified-panel').slideToggle('fast');
             });
             $('#btn-cancel-import-panel').click(function(){
                 $('#fcm-import-classified-panel').slideUp('fast');
+                resetCsvImportUI();
+            });
+
+            $('#btn-back-to-step-1').click(function(){
+                $('#fcm-import-step-2').hide();
+                $('#fcm-import-step-1').show();
+                $('#fcm-csv-classified-file').val('');
+                currentCsvText = null;
+            });
+
+            $('#btn-finish-import').click(function(){
+                $('#fcm-import-classified-panel').slideUp('fast');
+                resetCsvImportUI();
+                window.location.search = '?page=funnel-cta&tab=list';
+            });
+
+            function escapeHtml(text) {
+                if (text === null || text === undefined) return '';
+                return String(text)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            }
+
+            function resetCsvImportUI() {
+                $('#fcm-import-step-1').show();
+                $('#fcm-import-step-2').hide();
+                $('#fcm-import-step-3').hide();
+                $('#fcm-import-progress').hide();
+                $('#fcm-csv-classified-file').val('');
+                currentCsvText = null;
+                currentFailedItems = [];
+            }
+
+            function parseCSVLine(line, delimiter) {
+                var result = [];
+                var current = '';
+                var inQuotes = false;
+                for (var i = 0; i < line.length; i++) {
+                    var c = line[i];
+                    if (c === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (c === delimiter && !inQuotes) {
+                        result.push(current);
+                        current = '';
+                    } else {
+                        current += c;
+                    }
+                }
+                result.push(current);
+                return result;
+            }
+
+            function processCSVFileToStep2() {
+                var fileInput = $('#fcm-csv-classified-file')[0];
+                var file = fileInput ? fileInput.files[0] : null;
+                if (!file) {
+                    alert('Por favor, selecione um arquivo CSV primeiro.');
+                    return;
+                }
+
+                var reader = new FileReader();
+                reader.onload = function(e){
+                    currentCsvText = e.target.result;
+                    var lines = currentCsvText.split(/\r\n|\r|\n/);
+                    var distinctValues = {};
+
+                    lines.forEach(function(line){
+                        var lineTrimmed = line.trim();
+                        if (!lineTrimmed) return;
+
+                        var delimiter = ',';
+                        if ((lineTrimmed.match(/;/g) || []).length > (lineTrimmed.match(/,/g) || []).length) {
+                            delimiter = ';';
+                        } else if ((lineTrimmed.match(/\t/g) || []).length > (lineTrimmed.match(/,/g) || []).length) {
+                            delimiter = '\t';
+                        }
+
+                        var parts = parseCSVLine(lineTrimmed, delimiter);
+                        if (parts.length < 2) return;
+
+                        var colA = parts[0].replace(/^["']|["']$/g, '').trim();
+                        var colB = parts[1].replace(/^["']|["']$/g, '').trim();
+
+                        if (!colA || !colB) return;
+
+                        if (['url', 'slug', 'post', 'link'].indexOf(colA.toLowerCase()) !== -1 &&
+                            ['estagio', 'estágio', 'stage', 'funil', 'funnel'].indexOf(colB.toLowerCase()) !== -1) {
+                            return;
+                        }
+
+                        distinctValues[colB] = (distinctValues[colB] || 0) + 1;
+                    });
+
+                    if (Object.keys(distinctValues).length === 0) {
+                        alert('Nenhum dado válido encontrado na Coluna B do CSV. Verifique se o arquivo possui pelo menos duas colunas.');
+                        return;
+                    }
+
+                    var $tbody = $('#fcm-csv-mapping-tbody').empty();
+
+                    Object.keys(distinctValues).forEach(function(val){
+                        var count = distinctValues[val];
+                        var normVal = val.toLowerCase().trim();
+
+                        var selectHtml = '<select class="fcm-csv-map-select regular-text" data-csv-val="' + escapeHtml(val) + '">';
+                        selectHtml += '<option value="">-- Ignorar este valor --</option>';
+
+                        fcmAllFunnels.forEach(function(f){
+                            var isSelected = (normVal === f.id.toLowerCase() || normVal === f.name.toLowerCase());
+                            selectHtml += '<option value="' + escapeHtml(f.id) + '"' + (isSelected ? ' selected' : '') + '>' + escapeHtml(f.name) + ' (' + escapeHtml(f.id) + ')</option>';
+                        });
+
+                        selectHtml += '</select>';
+
+                        var rowHtml = '<tr>' +
+                            '<td><strong>' + escapeHtml(val) + '</strong></td>' +
+                            '<td>' + count + ' post(s)</td>' +
+                            '<td>' + selectHtml + '</td>' +
+                            '</tr>';
+
+                        $tbody.append(rowHtml);
+                    });
+
+                    $('#fcm-import-step-1').hide();
+                    $('#fcm-import-step-2').show();
+                    $('#fcm-import-step-3').hide();
+                    $('#fcm-import-progress').hide();
+                };
+                reader.readAsText(file);
+            }
+
+            $('#fcm-csv-classified-file').change(function(){
+                processCSVFileToStep2();
+            });
+
+            $('#btn-advance-to-step-2').click(function(){
+                processCSVFileToStep2();
             });
 
             $('#btn-run-classified-import').click(function(){
-                var fileInput = $('#fcm-csv-classified-file')[0];
-                var file = fileInput.files[0];
-                if (!file) {
-                    alert('Por favor, selecione um arquivo CSV.');
-                    return;
-                }
-                
-                var mapTopo = $('#fcm-map-topo').val() || 'topo';
-                var mapMeio = $('#fcm-map-meio').val() || 'meio';
-                var mapFundo = $('#fcm-map-fundo').val() || 'fundo';
-                var $btn = $(this);
+                if (!currentCsvText) return alert('Selecione um arquivo CSV.');
 
-                $btn.prop('disabled', true).text('Processando...');
-                
-                var reader = new FileReader();
-                reader.onload = function(e){
-                    $.post(ajaxurl, {
-                        action: 'fcm_import_classified',
-                        data: e.target.result,
-                        map_topo: mapTopo,
-                        map_meio: mapMeio,
-                        map_fundo: mapFundo
-                    }, function(res){
-                        $btn.prop('disabled', false).text('Processar Planilha');
-                        if(res.success) {
-                            alert(res.data + ' posts atualizados com sucesso!');
-                            window.location.search = '?page=funnel-cta&tab=list';
+                var funnelMap = {};
+                $('.fcm-csv-map-select').each(function(){
+                    var csvVal = $(this).data('csv-val');
+                    var targetFunnel = $(this).val();
+                    if (csvVal && targetFunnel) {
+                        funnelMap[csvVal] = targetFunnel;
+                    }
+                });
+
+                runClassifiedImport(currentCsvText, funnelMap);
+            });
+
+            function runClassifiedImport(csvContent, funnelMap) {
+                $('#fcm-import-step-2').hide();
+                $('#fcm-import-step-3').hide();
+                $('#fcm-import-progress').show();
+                $('#fcm-import-progress-text').text('Processando planilha e efetuando 3 tentativas automáticas de localização dos posts...');
+
+                $.post(ajaxurl, {
+                    action: 'fcm_import_classified',
+                    data: csvContent,
+                    funnel_map: funnelMap
+                }, function(res){
+                    $('#fcm-import-progress').hide();
+                    $('#fcm-import-step-3').show();
+
+                    if (res && res.success) {
+                        var data = res.data;
+                        currentFailedItems = data.failed_items || [];
+
+                        var summaryHtml = '<div style="background:#e7f4e8; border:1px solid #7ad03a; color:#2e6a30; padding:12px 15px; border-radius:4px;">' +
+                            '<h4 style="margin:0 0 5px 0; font-size:1.1em;">Processamento Concluído!</h4>' +
+                            'Total de registros analisados: <strong>' + data.total + '</strong><br>' +
+                            '✅ <strong>Importados/Atualizados com Sucesso:</strong> ' + data.success_count + '<br>' +
+                            '❌ <strong>Posts Não Encontrados após 3 tentativas:</strong> ' + data.failed_count +
+                            '</div>';
+
+                        $('#fcm-import-summary-box').html(summaryHtml);
+
+                        if (data.failed_count > 0) {
+                            var $failedTbody = $('#fcm-csv-failed-tbody').empty();
+                            currentFailedItems.forEach(function(item){
+                                $failedTbody.append('<tr>' +
+                                    '<td>' + item.line + '</td>' +
+                                    '<td><code>' + escapeHtml(item.url) + '</code></td>' +
+                                    '<td>' + escapeHtml(item.stage) + '</td>' +
+                                    '</tr>');
+                            });
+
+                            $('#fcm-import-failed-details').show();
+                            $('#btn-retry-failed-import').show();
+                            $('#btn-download-failed-csv').show();
                         } else {
-                            alert('Erro na importação.');
+                            $('#fcm-import-failed-details').hide();
+                            $('#btn-retry-failed-import').hide();
+                            $('#btn-download-failed-csv').hide();
                         }
-                    });
-                };
-                reader.readAsText(file);
+                    } else {
+                        var errMsg = (res && res.data) ? res.data : 'Erro na importação.';
+                        $('#fcm-import-summary-box').html('<div style="background:#fcf0f1; border:1px solid #d63638; color:#d63638; padding:12px 15px; border-radius:4px;">' + escapeHtml(errMsg) + '</div>');
+                    }
+                }).fail(function(){
+                    $('#fcm-import-progress').hide();
+                    $('#fcm-import-step-3').show();
+                    $('#fcm-import-summary-box').html('<div style="background:#fcf0f1; border:1px solid #d63638; color:#d63638; padding:12px 15px; border-radius:4px;">Erro de comunicação com o servidor durante a importação.</div>');
+                });
+            }
+
+            // Tentar Novamente (Apenas Posts Falhos)
+            $('#btn-retry-failed-import').click(function(){
+                if (!currentFailedItems || currentFailedItems.length === 0) return;
+
+                var failedCsvLines = [];
+                currentFailedItems.forEach(function(item){
+                    failedCsvLines.push('"' + item.url + '";"' + item.stage + '"');
+                });
+                var failedCsvData = failedCsvLines.join("\n");
+
+                var funnelMap = {};
+                $('.fcm-csv-map-select').each(function(){
+                    var csvVal = $(this).data('csv-val');
+                    var targetFunnel = $(this).val();
+                    if (csvVal && targetFunnel) {
+                        funnelMap[csvVal] = targetFunnel;
+                    }
+                });
+
+                runClassifiedImport(failedCsvData, funnelMap);
+            });
+
+            // Baixar CSV dos Falhados
+            $('#btn-download-failed-csv').click(function(){
+                if (!currentFailedItems || currentFailedItems.length === 0) return alert('Nenhum post falho para exportar.');
+
+                var csvContent = ["URL/Slug;Estágio"];
+                currentFailedItems.forEach(function(item){
+                    csvContent.push('"' + item.url + '";"' + item.stage + '"');
+                });
+
+                var blob = new Blob([csvContent.join("\n")], {type: "text/csv;charset=utf-8;"});
+                var link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = "posts_falhos_importacao.csv";
+                link.style.display = "none";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             });
 
             $('#btn-import-targets-trigger').click(function(){ $('#fcm-csv-targets').click(); });
@@ -2150,7 +2491,7 @@ class FunnelCTAManager {
                 }
 
                 var html = `
-                <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 420px; justify-content: flex-start;">
+                <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 460px; justify-content: flex-start;">
                     <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover este banner">
                         <span class="dashicons dashicons-no-alt"></span>
                     </button>
@@ -2180,6 +2521,16 @@ class FunnelCTAManager {
                         <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
                         <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace; height: 250px;"></textarea>
                     </div>
+                    <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px; display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label style="display:block; font-weight:600; font-size:11px;">ID HTML (CSS ID):</label>
+                            <input type="text" name="${namePrefix}[css_id]" value="" style="width:100%; font-family:monospace;" placeholder="Ex: meu-banner">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="display:block; font-weight:600; font-size:11px;">Classe HTML (CSS Class):</label>
+                            <input type="text" name="${namePrefix}[css_class]" value="" style="width:100%; font-family:monospace;" placeholder="Ex: banner-topo cta">
+                        </div>
+                    </div>
                 </div>`;
                 
                 container.append(html);
@@ -2200,7 +2551,7 @@ class FunnelCTAManager {
                     var namePrefix = key + '_random_' + colType + '[' + index + ']';
                     
                     var html = `
-                    <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 420px; justify-content: flex-start;">
+                    <div class="fcm-banner-box fcm-random-box" style="background: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 15px; position: relative; display: flex; flex-direction: column; min-height: 460px; justify-content: flex-start;">
                         <button type="button" class="fcm-remove-box-btn" style="position: absolute; top: 10px; right: 10px; background: none; border: none; color: #b32d2e; cursor: pointer;" title="Remover">
                             <span class="dashicons dashicons-no-alt"></span>
                         </button>
@@ -2230,6 +2581,16 @@ class FunnelCTAManager {
                             <label style="display:block; font-weight:600;">Conteúdo HTML / Shortcode:</label>
                             <textarea name="${namePrefix}[html]" rows="8" style="width:100%; font-family:monospace; height: 250px;">${rb.html || ''}</textarea>
                         </div>
+                        <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 10px; display: flex; gap: 10px;">
+                            <div style="flex: 1;">
+                                <label style="display:block; font-weight:600; font-size:11px;">ID HTML (CSS ID):</label>
+                                <input type="text" name="${namePrefix}[css_id]" value="${rb.css_id || ''}" style="width:100%; font-family:monospace;" placeholder="Ex: meu-banner">
+                            </div>
+                            <div style="flex: 1;">
+                                <label style="display:block; font-weight:600; font-size:11px;">Classe HTML (CSS Class):</label>
+                                <input type="text" name="${namePrefix}[css_class]" value="${rb.css_class || ''}" style="width:100%; font-family:monospace;" placeholder="Ex: banner-topo cta">
+                            </div>
+                        </div>
                     </div>`;
                     container.append(html);
                 });
@@ -2257,6 +2618,11 @@ class FunnelCTAManager {
                 $('#cb_image_mobile_url').val('');
                 $('#cb_image_html').val('');
                 $('#cb_image_mobile_html').val('');
+
+                $('#cb_image_css_id').val('');
+                $('#cb_image_css_class').val('');
+                $('#cb_image_mobile_css_id').val('');
+                $('#cb_image_mobile_css_class').val('');
 
                 $('.fcm-banner-column[data-key="cb"] .fcm-random-container').empty();
                 
@@ -2306,6 +2672,11 @@ class FunnelCTAManager {
                 $('#cb_image_html').val(data.html);
                 $('#cb_image_mobile_html').val(data.html_mobile);
 
+                $('#cb_image_css_id').val(data.css_id || '');
+                $('#cb_image_css_class').val(data.css_class || '');
+                $('#cb_image_mobile_css_id').val(data.css_id_mobile || '');
+                $('#cb_image_mobile_css_class').val(data.css_class_mobile || '');
+
                 populateRandomBanners($('.fcm-banner-column[data-key="cb"][data-column="desktop"] .fcm-random-container'), data.random_desktop, 'cb', 'desktop');
                 populateRandomBanners($('.fcm-banner-column[data-key="cb"][data-column="mobile"] .fcm-random-container'), data.random_mobile, 'cb', 'mobile');
                 
@@ -2353,6 +2724,11 @@ class FunnelCTAManager {
                 $('#scb_image_html').val('');
                 $('#scb_image_mobile_html').val('');
 
+                $('#scb_image_css_id').val('');
+                $('#scb_image_css_class').val('');
+                $('#scb_image_mobile_css_id').val('');
+                $('#scb_image_mobile_css_class').val('');
+
                 $('.fcm-banner-column[data-key="scb"] .fcm-random-container').empty();
                 
                 $('#scb_schedule').prop('checked', false).trigger('change');
@@ -2396,6 +2772,11 @@ class FunnelCTAManager {
                 $('#scb_image_mobile_url').val(data.url_mobile);
                 $('#scb_image_html').val(data.html);
                 $('#scb_image_mobile_html').val(data.html_mobile);
+
+                $('#scb_image_css_id').val(data.css_id || '');
+                $('#scb_image_css_class').val(data.css_class || '');
+                $('#scb_image_mobile_css_id').val(data.css_id_mobile || '');
+                $('#scb_image_mobile_css_class').val(data.css_class_mobile || '');
 
                 populateRandomBanners($('.fcm-banner-column[data-key="scb"][data-column="desktop"] .fcm-random-container'), data.random_desktop, 'scb', 'desktop');
                 populateRandomBanners($('.fcm-banner-column[data-key="scb"][data-column="mobile"] .fcm-random-container'), data.random_mobile, 'scb', 'mobile');
@@ -2492,24 +2873,34 @@ class FunnelCTAManager {
             });
 
             $('#fcm-run-import').click(function(){
-                var file = $('#fcm-csv-file').prop('files')[0];
+                var fileInput = $('#fcm-csv-file')[0];
+                var file = fileInput ? fileInput.files[0] : null;
                 if(!file) return alert('Selecione um arquivo CSV.');
                 
-                var mapTopo = $('#fcm-map-topo').val() || 'topo';
-                var mapMeio = $('#fcm-map-meio').val() || 'meio';
-                var mapFundo = $('#fcm-map-fundo').val() || 'fundo';
+                var funnelMap = {};
+                $('.fcm-map-funnel-input').each(function(){
+                    var key = $(this).data('funnel-key');
+                    var val = $(this).val();
+                    if (key) {
+                        funnelMap[key] = val;
+                    }
+                });
 
                 $('#fcm-import-log').html('<span class="spinner is-active" style="float:none;"></span> Processando...');
                 var reader = new FileReader();
                 reader.onload = function(e){
                     $.post(ajaxurl, {
-                        action: 'fcm_import_csv', 
+                        action: 'fcm_import_classified', 
                         data: e.target.result,
-                        map_topo: mapTopo,
-                        map_meio: mapMeio,
-                        map_fundo: mapFundo
+                        funnel_map: funnelMap
                     }, function(res){
-                        $('#fcm-import-log').html(res);
+                        if (res && res.success) {
+                            $('#fcm-import-log').html(res.data + ' posts importados/atualizados com sucesso!');
+                        } else {
+                            $('#fcm-import-log').html((res && res.data) ? res.data : 'Erro ao importar CSV.');
+                        }
+                    }).fail(function(){
+                        $('#fcm-import-log').html('Erro de comunicação ao importar CSV.');
                     });
                 };
                 reader.readAsText(file);
@@ -2815,13 +3206,17 @@ class FunnelCTAManager {
             'type' => $options[$prefix . '_type'] ?? 'image',
             'image' => $options[$prefix] ?? '',
             'url' => $options[$prefix . '_url'] ?? '',
-            'html' => $options[$prefix . '_html'] ?? ''
+            'html' => $options[$prefix . '_html'] ?? '',
+            'css_id' => $options[$prefix . '_css_id'] ?? '',
+            'css_class' => $options[$prefix . '_css_class'] ?? ''
         ];
         $static_mobile = [
             'type' => $options[$prefix . '_type_mobile'] ?? 'image',
             'image' => $options[$prefix . '_mobile'] ?? '',
             'url' => $options[$prefix . '_url_mobile'] ?? '',
-            'html' => $options[$prefix . '_html_mobile'] ?? ''
+            'html' => $options[$prefix . '_html_mobile'] ?? '',
+            'css_id' => $options[$prefix . '_css_id_mobile'] ?? '',
+            'css_class' => $options[$prefix . '_css_class_mobile'] ?? ''
         ];
 
         // Randomizados
@@ -2867,7 +3262,11 @@ class FunnelCTAManager {
             }
         }
 
-        $out = '<div class="fcm-cta-container" style="margin: 40px 0; text-align: center;">';
+        $active_banner = $picked_desktop ?: $picked_mobile;
+        $id_attr = !empty($active_banner['css_id']) ? ' id="' . esc_attr($active_banner['css_id']) . '"' : '';
+        $class_attr = !empty($active_banner['css_class']) ? ' ' . esc_attr($active_banner['css_class']) : '';
+
+        $out = sprintf('<div%s class="fcm-cta-container%s" style="margin: 40px 0; text-align: center;">', $id_attr, $class_attr);
         if ($html_desktop === $html_mobile) {
             $out .= $html_desktop;
         } else {
@@ -2888,13 +3287,17 @@ class FunnelCTAManager {
             'type' => $cb['type'] ?? 'image',
             'image' => $cb['image'] ?? '',
             'url' => $cb['url'] ?? '',
-            'html' => $cb['html'] ?? ''
+            'html' => $cb['html'] ?? '',
+            'css_id' => $cb['css_id'] ?? '',
+            'css_class' => $cb['css_class'] ?? ''
         ];
         $static_mobile = [
             'type' => $cb['type_mobile'] ?? 'image',
             'image' => $cb['image_mobile'] ?? '',
             'url' => $cb['url_mobile'] ?? '',
-            'html' => $cb['html_mobile'] ?? ''
+            'html' => $cb['html_mobile'] ?? '',
+            'css_id' => $cb['css_id_mobile'] ?? '',
+            'css_class' => $cb['css_class_mobile'] ?? ''
         ];
 
         // Randomizados
@@ -2940,7 +3343,11 @@ class FunnelCTAManager {
             }
         }
 
-        $out = '<div class="fcm-cta-container fcm-custom-cta" style="margin: 40px 0; text-align: center;">';
+        $active_banner = $picked_desktop ?: $picked_mobile;
+        $id_attr = !empty($active_banner['css_id']) ? ' id="' . esc_attr($active_banner['css_id']) . '"' : '';
+        $class_attr = !empty($active_banner['css_class']) ? ' ' . esc_attr($active_banner['css_class']) : '';
+
+        $out = sprintf('<div%s class="fcm-cta-container fcm-custom-cta%s" style="margin: 40px 0; text-align: center;">', $id_attr, $class_attr);
         if ($html_desktop === $html_mobile) {
             $out .= $html_desktop;
         } else {
@@ -3258,13 +3665,17 @@ class FunnelCTAManager {
             'type' => $scb['type'] ?? 'image',
             'image' => $scb['image'] ?? '',
             'url' => $scb['url'] ?? '',
-            'html' => $scb['html'] ?? ''
+            'html' => $scb['html'] ?? '',
+            'css_id' => $scb['css_id'] ?? '',
+            'css_class' => $scb['css_class'] ?? ''
         ];
         $static_mobile = [
             'type' => $scb['type_mobile'] ?? 'image',
             'image' => $scb['image_mobile'] ?? '',
             'url' => $scb['url_mobile'] ?? '',
-            'html' => $scb['html_mobile'] ?? ''
+            'html' => $scb['html_mobile'] ?? '',
+            'css_id' => $scb['css_id_mobile'] ?? '',
+            'css_class' => $scb['css_class_mobile'] ?? ''
         ];
 
         // Randomizados
@@ -3307,7 +3718,11 @@ class FunnelCTAManager {
             }
         }
 
-        $out = '<div class="fcm-cta-container fcm-shortcode-cta" style="margin: 20px 0; text-align: center;">';
+        $active_banner = $picked_desktop ?: $picked_mobile;
+        $id_attr = !empty($active_banner['css_id']) ? ' id="' . esc_attr($active_banner['css_id']) . '"' : '';
+        $class_attr = !empty($active_banner['css_class']) ? ' ' . esc_attr($active_banner['css_class']) : '';
+
+        $out = sprintf('<div%s class="fcm-cta-container fcm-shortcode-cta%s" style="margin: 20px 0; text-align: center;">', $id_attr, $class_attr);
         if ($html_desktop === $html_mobile) {
             $out .= $html_desktop;
         } else {
@@ -3497,35 +3912,187 @@ class FunnelCTAManager {
         wp_send_json_success();
     }
 
+    public function get_all_funnels() {
+        $options = get_option($this->option_name);
+        $label_topo = isset($options['label_topo']) && !empty($options['label_topo']) ? $options['label_topo'] : 'Topo de Funil';
+        $label_meio = isset($options['label_meio']) && !empty($options['label_meio']) ? $options['label_meio'] : 'Meio de Funil';
+        $label_fundo = isset($options['label_fundo']) && !empty($options['label_fundo']) ? $options['label_fundo'] : 'Fundo de Funil';
+
+        $all_funnels = [
+            'topo' => ['id' => 'topo', 'name' => $label_topo, 'description' => 'Estágio inicial do funil (Atração e Descberta)', 'post_types' => isset($options['topo_post_types']) ? (array)$options['topo_post_types'] : [], 'is_default' => true],
+            'meio' => ['id' => 'meio', 'name' => $label_meio, 'description' => 'Estágio intermediário do funil (Consideração da Solução)', 'post_types' => isset($options['meio_post_types']) ? (array)$options['meio_post_types'] : [], 'is_default' => true],
+            'fundo' => ['id' => 'fundo', 'name' => $label_fundo, 'description' => 'Estágio final de conversão (Venda e Oferta)', 'post_types' => isset($options['fundo_post_types']) ? (array)$options['fundo_post_types'] : [], 'is_default' => true],
+        ];
+
+        $custom_funnels = $this->get_custom_funnels();
+        foreach ($custom_funnels as $cf_id => $cf) {
+            $all_funnels[$cf_id] = [
+                'id' => $cf_id,
+                'name' => $cf['name'],
+                'description' => !empty($cf['description']) ? $cf['description'] : 'Funil Personalizado',
+                'post_types' => isset($cf['post_types']) ? (array)$cf['post_types'] : [],
+                'is_default' => false
+            ];
+        }
+
+        return $all_funnels;
+    }
+
     public function handle_classified_import() {
-        if (!current_user_can('manage_options')) wp_die();
-        $lines = explode("\n", stripslashes($_POST['data']));
-        
-        $map_topo = mb_strtolower(sanitize_text_field(isset($_POST['map_topo']) ? $_POST['map_topo'] : 'topo'), 'UTF-8');
-        $map_meio = mb_strtolower(sanitize_text_field(isset($_POST['map_meio']) ? $_POST['map_meio'] : 'meio'), 'UTF-8');
-        $map_fundo = mb_strtolower(sanitize_text_field(isset($_POST['map_fundo']) ? $_POST['map_fundo'] : 'fundo'), 'UTF-8');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('Sem permissão.');
+        }
 
-        $count = 0;
-        foreach ($lines as $line) {
-            $data = str_getcsv($line);
-            if (count($data) < 2) continue;
-            $slug = basename(rtrim(parse_url(trim($data[0]), PHP_URL_PATH), '/'));
-            $csv_stage = mb_strtolower(trim($data[1]), 'UTF-8');
-            
-            $stage = '';
-            if ($csv_stage === $map_topo || $csv_stage === 'topo') $stage = 'topo';
-            elseif ($csv_stage === $map_meio || $csv_stage === 'meio') $stage = 'meio';
-            elseif ($csv_stage === $map_fundo || $csv_stage === 'fundo') $stage = 'fundo';
+        $raw_data = isset($_POST['data']) ? stripslashes($_POST['data']) : '';
+        if (empty($raw_data)) {
+            wp_send_json_error('Arquivo CSV vazio ou inválido.');
+        }
 
-            if (!$stage) continue;
+        $raw_funnel_map = isset($_POST['funnel_map']) && is_array($_POST['funnel_map']) ? $_POST['funnel_map'] : [];
+        $lookup_map = [];
 
-            $posts = get_posts(['name' => $slug, 'post_type' => 'post', 'post_status' => 'any', 'posts_per_page' => 1]);
-            if ($posts) {
-                update_post_meta($posts[0]->ID, '_fcm_stage', $stage);
-                $count++;
+        foreach ($raw_funnel_map as $csv_val => $funnel_id) {
+            $csv_val_clean = mb_strtolower(trim((string)$csv_val), 'UTF-8');
+            $funnel_id_clean = trim((string)$funnel_id);
+            if ($csv_val_clean !== '' && $funnel_id_clean !== '') {
+                $lookup_map[$csv_val_clean] = $funnel_id_clean;
             }
         }
-        wp_send_json_success($count);
+
+        $lines = preg_split('/\r\n|\r|\n/', $raw_data);
+        $pending_rows = [];
+        $line_number = 0;
+
+        foreach ($lines as $line) {
+            $line_number++;
+            $line_trimmed = trim($line);
+            if (empty($line_trimmed)) continue;
+
+            $delimiter = ',';
+            if (substr_count($line_trimmed, ';') > substr_count($line_trimmed, ',')) {
+                $delimiter = ';';
+            } elseif (substr_count($line_trimmed, "\t") > substr_count($line_trimmed, ',')) {
+                $delimiter = "\t";
+            }
+
+            $data = str_getcsv($line_trimmed, $delimiter);
+            if (count($data) < 2) continue;
+
+            $raw_url_or_slug = trim($data[0], " \t\n\r\0\x0B\"'");
+            $raw_csv_stage   = trim($data[1], " \t\n\r\0\x0B\"'");
+            $csv_stage_key   = mb_strtolower($raw_csv_stage, 'UTF-8');
+
+            if (empty($raw_url_or_slug) || empty($raw_csv_stage)) continue;
+
+            // Ignorar linha de cabeçalho se existir
+            if (in_array(mb_strtolower($raw_url_or_slug, 'UTF-8'), ['url', 'slug', 'post', 'link', 'post_url', 'post_slug']) &&
+                in_array($csv_stage_key, ['estagio', 'estágio', 'stage', 'funil', 'funnel'])) {
+                continue;
+            }
+
+            $target_stage = isset($lookup_map[$csv_stage_key]) ? $lookup_map[$csv_stage_key] : '';
+            if (!$target_stage) continue;
+
+            $pending_rows[] = [
+                'line' => $line_number,
+                'raw_url' => $raw_url_or_slug,
+                'raw_stage' => $raw_csv_stage,
+                'target_stage' => $target_stage
+            ];
+        }
+
+        $total_items = count($pending_rows);
+        $success_count = 0;
+        $failed_items = [];
+
+        // TENTATIVA 1: Busca estrita por ID, URL exata ou Slug exato
+        $unresolved = [];
+        foreach ($pending_rows as $row) {
+            $post_id = $this->find_post_strict($row['raw_url']);
+            if ($post_id) {
+                update_post_meta($post_id, '_fcm_stage', $row['target_stage']);
+                $success_count++;
+            } else {
+                $unresolved[] = $row;
+            }
+        }
+
+        // TENTATIVA 2: Retentativa estrita idêntica para falhas temporárias do servidor/banco
+        if (!empty($unresolved)) {
+            $still_unresolved = [];
+            foreach ($unresolved as $row) {
+                $post_id = $this->find_post_strict($row['raw_url']);
+                if ($post_id) {
+                    update_post_meta($post_id, '_fcm_stage', $row['target_stage']);
+                    $success_count++;
+                } else {
+                    $still_unresolved[] = $row;
+                }
+            }
+            $unresolved = $still_unresolved;
+        }
+
+        // TENTATIVA 3: 3ª retentativa estrita idêntica
+        if (!empty($unresolved)) {
+            $final_unresolved = [];
+            foreach ($unresolved as $row) {
+                $post_id = $this->find_post_strict($row['raw_url']);
+                if ($post_id) {
+                    update_post_meta($post_id, '_fcm_stage', $row['target_stage']);
+                    $success_count++;
+                } else {
+                    $final_unresolved[] = [
+                        'line' => $row['line'],
+                        'url' => $row['raw_url'],
+                        'stage' => $row['raw_stage']
+                    ];
+                }
+            }
+            $failed_items = $final_unresolved;
+        }
+
+        wp_send_json_success([
+            'total' => $total_items,
+            'success_count' => $success_count,
+            'failed_count' => count($failed_items),
+            'failed_items' => $failed_items
+        ]);
+    }
+
+    private function find_post_strict($raw_url) {
+        // Busca 1: ID Numérico
+        if (is_numeric($raw_url)) {
+            $p = get_post((int)$raw_url);
+            if ($p && $p->post_status !== 'trash') return $p->ID;
+        }
+
+        // Busca 2: URL Exata ou limpa de parâmetros
+        if (strpos($raw_url, 'http://') === 0 || strpos($raw_url, 'https://') === 0) {
+            $post_id = url_to_postid($raw_url);
+            if ($post_id) return $post_id;
+
+            $clean_url = strtok($raw_url, '?#');
+            if ($clean_url !== $raw_url) {
+                $post_id = url_to_postid($clean_url);
+                if ($post_id) return $post_id;
+            }
+        }
+
+        // Busca 3: Slug Exato
+        $path = parse_url(urldecode($raw_url), PHP_URL_PATH);
+        $path_clean = preg_replace('/\.(html|php|htm)$/i', '', rtrim((string)$path, '/'));
+        $slug = sanitize_title(basename($path_clean));
+        if ($slug) {
+            $posts = get_posts([
+                'name' => $slug,
+                'post_type' => 'any',
+                'post_status' => 'any',
+                'posts_per_page' => 1
+            ]);
+            if ($posts) return $posts[0]->ID;
+        }
+
+        return 0;
     }
 }
 
