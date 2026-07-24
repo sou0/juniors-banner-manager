@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Junior's banner manager
  * Description: Gerencia CTAs dinâmicos, banners de funil, banners personalizados e banners via shortcode com cronômetros e controle de posição.
- * Version: 4.3
+ * Version: 4.4
  * Author: junior
  * Text Domain: funnel-cta
  */
@@ -28,6 +28,23 @@ class FunnelCTAManager {
             }
         }
         return is_array($custom_funnels) ? $custom_funnels : [];
+    }
+
+    public function get_post_stages($post_id) {
+        $val = get_post_meta($post_id, '_fcm_stage', true);
+        if (empty($val)) return [];
+        if (is_array($val)) return array_values(array_filter(array_map('trim', $val)));
+        if (is_string($val)) {
+            $all = get_post_meta($post_id, '_fcm_stage', false);
+            if (is_array($all) && count($all) > 1) {
+                return array_values(array_filter(array_map('trim', $all)));
+            }
+            if (strpos($val, ',') !== false) {
+                return array_values(array_filter(array_map('trim', explode(',', $val))));
+            }
+            return [$val];
+        }
+        return [];
     }
 
     public function __construct() {
@@ -62,6 +79,11 @@ class FunnelCTAManager {
 
         // Registrar Shortcode do Banner Avulso
         add_shortcode('fcm_banner', [$this, 'render_fcm_banner_shortcode']);
+
+        // Registrar Shortcodes dos Funis (Individual e Compartilhado)
+        add_shortcode('fcm_funnel', [$this, 'render_fcm_funnel_shortcode']);
+        add_shortcode('fcm_funnel_banner', [$this, 'render_fcm_funnel_shortcode']);
+        add_shortcode('fcm_funnel_shared', [$this, 'render_fcm_funnel_shared_shortcode']);
 
         // Injetar JS do Cronômetro no Footer
         add_action('wp_footer', [$this, 'render_countdown_js']);
@@ -195,12 +217,16 @@ class FunnelCTAManager {
         $post_stages = [];
         $post_titles = [];
         foreach($classified_posts as $p) {
-            $post_stages[$p->ID] = get_post_meta($p->ID, '_fcm_stage', true);
-            $post_titles[$p->ID] = $p->post_title;
+            $stages = $this->get_post_stages($p->ID);
+            if (!empty($stages)) {
+                $post_stages[$p->ID] = $stages;
+                $post_titles[$p->ID] = $p->post_title;
+            }
         }
 
         $conflicts = []; // Grupos de conflito
 
+        // 1. CONFLITOS OVERRIDE VS FUNIS
         foreach ($custom_banners as $cb) {
             if ($cb['status'] !== 'active') continue;
             
@@ -211,48 +237,201 @@ class FunnelCTAManager {
             foreach ($targets as $url) {
                 $pid = url_to_postid($url);
                 if ($pid && isset($post_stages[$pid])) {
-                    $stage = $post_stages[$pid];
-                    $group_key = $cb['id'] . '_' . $stage;
-                    
+                    foreach ($post_stages[$pid] as $stage) {
+                        $group_key = 'override_' . $cb['id'] . '_' . $stage;
+                        
+                        if (!isset($conflicts[$group_key])) {
+                            $conflicts[$group_key] = [
+                                'type' => 'override_vs_stage',
+                                'title' => 'Override "' . $cb['name'] . '" interferindo no estágio "' . ($stage_labels[$stage] ?? $stage) . '"',
+                                'cb_id' => $cb['id'],
+                                'cb_name' => $cb['name'],
+                                'stage' => $stage,
+                                'stage_label' => $stage_labels[$stage] ?? $stage,
+                                'cb_exclusive' => empty($cb['allow_multiple']),
+                                'links' => []
+                            ];
+                        }
+                        $conflicts[$group_key]['links'][] = [
+                            'url' => $url,
+                            'id' => $pid,
+                            'title' => $post_titles[$pid]
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Helper para resolver posição final de um estágio no post
+        $get_stage_pos_key = function($post_id, $stage) use ($options) {
+            $override_pos = get_post_meta($post_id, '_fcm_position_override', true);
+            if ($override_pos) {
+                $p = get_post_meta($post_id, '_fcm_paragraph_override', true) ?: 3;
+                return $override_pos . ($override_pos === 'after_p' ? ':' . $p : '');
+            }
+            $pos = isset($options[$stage . '_position']) ? $options[$stage . '_position'] : 'middle';
+            $p = isset($options[$stage . '_paragraph']) ? (int)$options[$stage . '_paragraph'] : 3;
+            return $pos . ($pos === 'after_p' ? ':' . $p : '');
+        };
+
+        // 2. CONFLITOS DE POSIÇÃO ENTRE MÚLTIPLOS FUNIS E SHORTCODES NO MESMO POST
+        foreach ($post_stages as $pid => $stages) {
+            if (count($stages) < 2) continue;
+
+            $permalink = get_permalink($pid);
+            $title = $post_titles[$pid];
+
+            // Verificar se 2 ou mais funis ativos no post colidem em posição (Automáticos)
+            $auto_positions = [];
+            $shared_sc_stages = [];
+
+            foreach ($stages as $stage) {
+                if (!$this->is_banner_active($options, $stage)) continue;
+
+                $use_sc = !empty($options[$stage . '_use_shortcode']);
+                $allow_shared = !empty($options[$stage . '_allow_shared_shortcode']);
+
+                if (!$use_sc) {
+                    // Modo Automático -> calcular posição
+                    $pos_key = $get_stage_pos_key($pid, $stage);
+                    $auto_positions[$pos_key][] = $stage;
+                } else {
+                    // Modo Shortcode
+                    if ($allow_shared) {
+                        $shared_sc_stages[] = $stage;
+                    }
+                }
+            }
+
+            // Colisão de Posição Automática entre Funis
+            foreach ($auto_positions as $pos_key => $conflicting_stages) {
+                if (count($conflicting_stages) >= 2) {
+                    $pair_key = implode('_vs_', $conflicting_stages) . '_' . $pos_key;
+                    $group_key = 'stage_pos_' . $pair_key;
+
+                    $names = array_map(function($stg) use ($stage_labels) {
+                        return $stage_labels[$stg] ?? $stg;
+                    }, $conflicting_stages);
+                    $names_str = implode(' e ', $names);
+
                     if (!isset($conflicts[$group_key])) {
                         $conflicts[$group_key] = [
-                            'cb_id' => $cb['id'],
-                            'cb_name' => $cb['name'],
-                            'stage' => $stage,
-                            'stage_label' => $stage_labels[$stage] ?? $stage,
-                            'cb_exclusive' => empty($cb['allow_multiple']),
+                            'type' => 'stage_vs_stage_position',
+                            'title' => 'Conflito de Posição entre Funis (' . $names_str . ')',
+                            'stage_label' => $names_str,
+                            'stages' => $conflicting_stages,
+                            'position_key' => $pos_key,
                             'links' => []
                         ];
                     }
                     $conflicts[$group_key]['links'][] = [
-                        'url' => $url,
+                        'url' => $permalink,
                         'id' => $pid,
-                        'title' => $post_titles[$pid]
+                        'title' => $title
+                    ];
+                }
+            }
+
+            // Colisão de Shortcode Compartilhado
+            if (count($shared_sc_stages) >= 2) {
+                $pair_key = implode('_vs_', $shared_sc_stages);
+                $group_key = 'shared_sc_' . $pair_key;
+
+                $names = array_map(function($stg) use ($stage_labels) {
+                    return $stage_labels[$stg] ?? $stg;
+                }, $shared_sc_stages);
+                $names_str = implode(' e ', $names);
+
+                if (!isset($conflicts[$group_key])) {
+                    $conflicts[$group_key] = [
+                        'type' => 'stage_vs_stage_shortcode',
+                        'title' => 'Conflito de Shortcode Compartilhado (' . $names_str . ')',
+                        'stage_label' => $names_str,
+                        'stages' => $shared_sc_stages,
+                        'links' => []
+                    ];
+                }
+                $conflicts[$group_key]['links'][] = [
+                    'url' => $permalink,
+                    'id' => $pid,
+                    'title' => $title
+                ];
+            }
+        }
+
+        // 3. CONFLITO DE DUPLICAÇÃO DE SHORTCODE (INDIVIDUAL VS COMPARTILHADO NO MESMO FUNIL)
+        $all_stages_keys = array_merge(['topo', 'meio', 'fundo'], array_keys($custom_funnels));
+        foreach ($all_stages_keys as $stg) {
+            $use_sc = !empty($options[$stg . '_use_shortcode']);
+            $allow_shared = !empty($options[$stg . '_allow_shared_shortcode']);
+            
+            if ($use_sc && $allow_shared && $this->is_banner_active($options, $stg)) {
+                $matching_links = [];
+                foreach ($post_stages as $pid => $assigned_stages) {
+                    if (in_array($stg, $assigned_stages)) {
+                        $matching_links[] = [
+                            'url' => get_permalink($pid),
+                            'id' => $pid,
+                            'title' => $post_titles[$pid]
+                        ];
+                    }
+                }
+
+                if (!empty($matching_links)) {
+                    $group_key = 'sc_duplication_' . $stg;
+                    $stg_label = $stage_labels[$stg] ?? $stg;
+                    $conflicts[$group_key] = [
+                        'type' => 'shortcode_duplication_risk',
+                        'title' => 'Risco de Duplicação por Shortcode ("' . $stg_label . '")',
+                        'stage' => $stg,
+                        'stage_label' => $stg_label,
+                        'links' => $matching_links
                     ];
                 }
             }
         }
 
         if (empty($conflicts)) {
-            echo '<div style="padding:15px; background:#d4edda; color:#155724; border-radius:4px; border:1px solid #c3e6cb;">Nenhum conflito direto detectado entre Banners de Override e Estágios de Funil no momento.</div>';
+            echo '<div style="padding:15px; background:#d4edda; color:#155724; border-radius:4px; border:1px solid #c3e6cb;">Nenhum conflito direto detectado entre Banners, Funis e Shortcodes no momento.</div>';
             wp_die();
         }
 
         $html = '<div style="display:flex; flex-direction:column; gap:15px;">';
         foreach ($conflicts as $key => $group) {
             $count = count($group['links']);
-            $exclusive_warning = $group['cb_exclusive'] 
-                ? '<span style="color:#d63638; font-weight:bold; font-size:12px;">(EXCLUSIVO: Substitui o Funil)</span>' 
-                : '<span style="color:#2271b1; font-weight:bold; font-size:12px;">(Simultâneo: Pode causar duplicidade na mesma posição)</span>';
+            $type = $group['type'] ?? 'override_vs_stage';
 
-            $html .= '<div style="background:#fff; border:1px solid #ccd0d4; border-left:4px solid '.($group['cb_exclusive'] ? '#d63638' : '#2271b1').'; padding:15px; border-radius:4px; box-shadow:0 1px 1px rgba(0,0,0,0.04);">';
+            $badge = '';
+            $border_color = '#2271b1';
+
+            if ($type === 'override_vs_stage') {
+                $is_exc = !empty($group['cb_exclusive']);
+                $border_color = $is_exc ? '#d63638' : '#2271b1';
+                $warning_desc = $is_exc 
+                    ? '<span style="color:#d63638; font-weight:bold; font-size:12px;">(EXCLUSIVO: Substitui o Funil)</span>' 
+                    : '<span style="color:#2271b1; font-weight:bold; font-size:12px;">(Simultâneo: Pode disputar posição no post)</span>';
+                $badge = '<span style="background:#0c5460; color:#fff; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; margin-right:6px;">OVERRIDE</span>';
+            } elseif ($type === 'stage_vs_stage_position') {
+                $border_color = '#d63638';
+                $warning_desc = '<span style="color:#d63638; font-weight:bold; font-size:12px;">(CONFLITO DE POSIÇÃO: Banners automáticos disputando o mesmo local no post)</span>';
+                $badge = '<span style="background:#d63638; color:#fff; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; margin-right:6px;">POSIÇÃO FUNIL</span>';
+            } elseif ($type === 'stage_vs_stage_shortcode') {
+                $border_color = '#dba617';
+                $warning_desc = '<span style="color:#856404; font-weight:bold; font-size:12px;">(SHORTCODE COMPARTILHADO: Múltiplos funis ativos disputando [fcm_funnel_shared])</span>';
+                $badge = '<span style="background:#004d40; color:#fff; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; margin-right:6px;">SHORTCODE COMPARTILHADO</span>';
+            } elseif ($type === 'shortcode_duplication_risk') {
+                $border_color = '#d63638';
+                $warning_desc = '<span style="color:#d63638; font-weight:bold; font-size:12px;">(DUPLICIDADE DE SHORTCODE: Ativo no compartilhado [fcm_funnel_shared] e pode duplicar se usado com shortcode individual [fcm_funnel stage="' . esc_attr($group['stage']) . '"])</span>';
+                $badge = '<span style="background:#b32d2e; color:#fff; font-size:10px; padding:2px 6px; border-radius:3px; font-weight:bold; margin-right:6px;">DUPLICIDADE SHORTCODE</span>';
+            }
+
+            $html .= '<div style="background:#fff; border:1px solid #ccd0d4; border-left:4px solid ' . $border_color . '; padding:15px; border-radius:4px; box-shadow:0 1px 1px rgba(0,0,0,0.04);">';
             $html .= '<div style="display:flex; justify-content:space-between; align-items:center;">';
             $html .= '<div>';
-            $html .= '<h4 style="margin:0 0 5px 0; font-size:14px;">Override <strong>"'.esc_html($group['cb_name']).'"</strong> interferindo no estágio <strong>"'.esc_html($group['stage_label']).'"</strong></h4>';
-            $html .= '<div style="font-size:13px; color:#555;">' . $count . ' link(s) afetado(s) ' . $exclusive_warning . '</div>';
+            $html .= '<h4 style="margin:0 0 5px 0; font-size:14px;">' . $badge . ' ' . esc_html($group['title']) . '</h4>';
+            $html .= '<div style="font-size:13px; color:#555;">' . $count . ' post(s)/link(s) afetado(s) ' . $warning_desc . '</div>';
             $html .= '</div>';
             
-            // Botão para abrir os detalhes
             $group_json = esc_attr(json_encode($group));
             $html .= '<button type="button" class="button button-secondary btn-view-conflict-details" data-group="'.$group_json.'">Ver Detalhes</button>';
             $html .= '</div>';
@@ -549,7 +728,7 @@ class FunnelCTAManager {
         }
         ?>
         <div class="wrap" style="max-width: 1200px;">
-            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.3</span></h1>
+            <h1 style="margin-bottom: 20px;">Junior's banner manager <span style="font-size:12px; background:#0073aa; color:#fff; padding:3px 8px; border-radius:10px; vertical-align:middle;">Pro v4.4</span></h1>
             
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'saved') echo '<div class="notice notice-success is-dismissible"><p>Banner salvo com sucesso!</p></div>'; ?>
             <?php if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') echo '<div class="notice notice-success is-dismissible"><p>Banner excluído com sucesso!</p></div>'; ?>
@@ -932,6 +1111,36 @@ class FunnelCTAManager {
                                     </div>
                                 </td>
                             </tr>
+                            <?php if ($key !== 'padrao' && $key !== 'global'): ?>
+                            <tr>
+                                <th scope="row"><label><strong>Modo de Inserção via Shortcode</strong></label></th>
+                                <td>
+                                    <label style="font-weight: 600; display:block; margin-bottom:8px;">
+                                        <input type="checkbox" name="fcm_settings[<?php echo esc_attr($key . '_use_shortcode'); ?>]" class="fcm-use-shortcode-toggle" value="1" <?php checked(!empty($options[$key . '_use_shortcode'])); ?>>
+                                        Inserir este banner de funil via Shortcode (desativa a inserção automática no conteúdo)
+                                    </label>
+                                    <div class="fcm-shortcode-info-box" style="padding: 12px 15px; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 4px; display: <?php echo !empty($options[$key . '_use_shortcode']) ? 'block' : 'none'; ?>; margin-top: 10px;">
+                                        <p style="margin: 0 0 8px 0; font-size: 13px; color: #1b5e20;"><strong>Shortcode Individual deste Funil:</strong></p>
+                                        <code style="font-size: 13px; background: #fff; padding: 4px 8px; border: 1px solid #a5d6a7; border-radius: 3px; display: inline-block;">[fcm_funnel stage="<?php echo esc_attr($key); ?>"]</code>
+                                        <p class="description" style="margin-top: 8px; font-size: 12px; color: #2e7d32;">
+                                            Copie e cole este shortcode no conteúdo do post. O banner só será exibido se o post possuir este funil atribuído.
+                                        </p>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th scope="row"><label><strong>Shortcode Compartilhado</strong></label></th>
+                                <td>
+                                    <label style="font-weight: 600;">
+                                        <input type="checkbox" name="fcm_settings[<?php echo esc_attr($key . '_allow_shared_shortcode'); ?>]" value="1" <?php checked(!empty($options[$key . '_allow_shared_shortcode'])); ?>>
+                                        Permitir que este funil seja exibido no Shortcode Compartilhado (<code>[fcm_funnel_shared]</code>)
+                                    </label>
+                                    <p class="description" style="margin-top: 5px;">
+                                        Se marcado e a opção de shortcode estiver ativa, quando o shortcode compartilhado <code>[fcm_funnel_shared]</code> for inserido em um post pertencente a este funil, este banner será renderizado automaticamente.
+                                    </p>
+                                </td>
+                            </tr>
+                            <?php endif; ?>
                             <tr>
                                 <th scope="row"><label><strong>Agendamento (Temporizador)</strong></label></th>
                                 <td>
@@ -1044,7 +1253,7 @@ class FunnelCTAManager {
                     </table>
                 </div>
 
-                    <div id="fcm-main-submit-btn" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; display: <?php echo in_array($active_tab, array_merge(array_keys($stages), ['global', 'advanced', 'dashboard'])) ? 'block' : 'none'; ?>;">
+                    <div id="fcm-main-submit-btn" style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #eee; display: <?php echo in_array($active_tab, array_merge(array_keys($stages), ['global', 'advanced', 'dashboard'])) && !in_array($active_tab, ['logs', 'list', 'custom-list', 'shortcode-list', 'custom-edit', 'shortcode-edit']) ? 'block' : 'none'; ?>;">
                         <?php submit_button('Salvar', 'primary', 'submit', false); ?>
                     </div>
                 </form>
@@ -1634,18 +1843,24 @@ class FunnelCTAManager {
                                     while ($classified_posts->have_posts()) {
                                         $classified_posts->the_post();
                                         $post_id = get_the_ID();
-                                        $stage = get_post_meta($post_id, '_fcm_stage', true);
-                                        if(empty($stage)) continue;
+                                        $stages = $this->get_post_stages($post_id);
+                                        if (empty($stages)) continue;
                                         
                                         $pos_override = get_post_meta($post_id, '_fcm_position_override', true);
                                         $p_override = get_post_meta($post_id, '_fcm_paragraph_override', true);
                                         
                                         $colors = ['topo' => '#d1ecf1', 'meio' => '#fff3cd', 'fundo' => '#f8d7da'];
-                                        $bg = isset($colors[$stage]) ? $colors[$stage] : '#eee';
-                                        $stage_label = $stage;
-                                        if ($stage === 'topo') $stage_label = $label_topo;
-                                        if ($stage === 'meio') $stage_label = $label_meio;
-                                        if ($stage === 'fundo') $stage_label = $label_fundo;
+                                        $stage_labels_map = ['topo' => $label_topo, 'meio' => $label_meio, 'fundo' => $label_fundo];
+                                        foreach ($custom_funnels as $cf_id => $cf) {
+                                            $stage_labels_map[$cf_id] = $cf['name'];
+                                        }
+
+                                        $badges_html = '';
+                                        foreach ($stages as $stg) {
+                                            $bg = isset($colors[$stg]) ? $colors[$stg] : '#e2e3e5';
+                                            $lbl = isset($stage_labels_map[$stg]) ? $stage_labels_map[$stg] : $stg;
+                                            $badges_html .= '<span style="background:'. $bg .'; padding: 4px 8px; border-radius: 4px; font-weight: bold; text-transform: uppercase; font-size: 10px; margin-right: 4px; display: inline-block; margin-bottom: 2px;">' . esc_html($lbl) . '</span>';
+                                        }
 
                                         $pos_text = 'Padrão';
                                         if ($pos_override) {
@@ -1657,7 +1872,7 @@ class FunnelCTAManager {
                                         echo '<tr>';
                                         echo '<th scope="row" class="check-column"><input type="checkbox" name="fcm_classified_ids[]" class="fcm-classified-cb" value="' . $post_id . '"></th>';
                                         echo '<td><strong>' . get_the_title() . '</strong><br><small><a href="' . get_permalink() . '" target="_blank">' . get_permalink() . '</a></small></td>';
-                                        echo '<td><span style="background:'. $bg .'; padding: 5px 10px; border-radius: 4px; font-weight: bold; text-transform: uppercase; font-size: 10px;">' . esc_html($stage_label) . '</span></td>';
+                                        echo '<td>' . $badges_html . '</td>';
                                         echo '<td>' . esc_html($pos_text) . '</td>';
                                         echo '<td>';
                                         echo '<a href="#" class="button button-small btn-edit-post-pos" data-id="' . $post_id . '" data-pos="' . esc_attr($pos_override) . '" data-p="' . esc_attr($p_override) . '">Posição</a> ';
@@ -1902,7 +2117,6 @@ class FunnelCTAManager {
                     } else {
                         $('#fcm-main-submit-btn').hide();
                     }
-                    $('#fcm-main-submit-btn').show();
                 } else {
                     $('#fcm-main-submit-btn').hide();
                 }
@@ -2794,32 +3008,60 @@ class FunnelCTAManager {
 
 
             // ----- MONITOR DE CONFLITOS E DESTAQUES ----- //
+            $(document).on('change', '.fcm-use-shortcode-toggle', function(){
+                var $box = $(this).closest('td').find('.fcm-shortcode-info-box');
+                if ($(this).is(':checked')) {
+                    $box.slideDown('fast');
+                } else {
+                    $box.slideUp('fast');
+                }
+            });
+
             $(document).on('click', '.btn-view-conflict-details', function(e){
                 e.preventDefault();
                 var group = $(this).data('group');
                 
-                $('#conflict-details-title').text('Conflitos do Override "' + group.cb_name + '"');
-                var desc = group.cb_exclusive 
-                    ? 'Este Override está configurado como exclusivo e vai engolir o banner do estágio <strong>' + group.stage_label + '</strong> nos links abaixo.'
-                    : 'Este Override está configurado para aparecer junto com o funil, mas pode haver duplicidade se disputarem a mesma posição no estágio <strong>' + group.stage_label + '</strong>.';
+                $('#conflict-details-title').text(group.title || ('Conflito: ' + group.stage_label));
+                var desc = '';
+                if (group.type === 'override_vs_stage') {
+                    desc = group.cb_exclusive 
+                        ? 'Este Override está configurado como exclusivo e vai engolir o banner do estágio <strong>' + group.stage_label + '</strong> nos links abaixo.'
+                        : 'Este Override está configurado para aparecer junto com o funil, mas pode haver duplicidade se disputarem a mesma posição no estágio <strong>' + group.stage_label + '</strong>.';
+                    $('#btn-configure-override').show().off('click').on('click', function(){
+                        var $row = $('#table-overrides-banners input[value="'+group.cb_id+'"]').closest('tr');
+                        $row.find('.btn-edit-custom-banner').click();
+                    });
+                    $('#btn-configure-stage').show().off('click').on('click', function(){
+                        switchTab('#tab-' + group.stage);
+                    });
+                } else if (group.type === 'stage_vs_stage_position') {
+                    desc = 'Os funis <strong>' + group.stage_label + '</strong> estão atribuídos aos posts abaixo e configurados para injeção automática na MESMA posição. Altere a posição de injeção em um dos funis para evitar acúmulo visual no mesmo ponto do artigo.';
+                    $('#btn-configure-override').hide();
+                    $('#btn-configure-stage').show().text('Configurar Funil').off('click').on('click', function(){
+                        if (group.stages && group.stages[0]) switchTab('#tab-' + group.stages[0]);
+                    });
+                } else if (group.type === 'stage_vs_stage_shortcode') {
+                    desc = 'Os funis <strong>' + group.stage_label + '</strong> estão atribuídos aos posts abaixo e ambos estão marcados para responder ao shortcode compartilhado <code>[fcm_funnel_shared]</code>. Quando o shortcode for executado nestes posts, ambos disputarão a exibição.';
+                    $('#btn-configure-override').hide();
+                    $('#btn-configure-stage').show().text('Configurar Funil').off('click').on('click', function(){
+                        if (group.stages && group.stages[0]) switchTab('#tab-' + group.stages[0]);
+                    });
+                } else if (group.type === 'shortcode_duplication_risk') {
+                    desc = 'O funil <strong>' + group.stage_label + '</strong> está configurado para o Shortcode Compartilhado (<code>[fcm_funnel_shared]</code>). Se você colocar o shortcode individual <code>[fcm_funnel stage="' + group.stage + '"]</code> e o compartilhado no mesmo modelo de post, este banner aparecerá <strong>duplicado</strong>.<br><br><strong>Solução:</strong> Utilize apenas um dos shortcodes no seu modelo de post ou desmarque a opção "Permitir no Shortcode Compartilhado" deste funil se for usar o shortcode individual.';
+                    $('#btn-configure-override').hide();
+                    $('#btn-configure-stage').show().text('Configurar Funil ' + group.stage_label).off('click').on('click', function(){
+                        switchTab('#tab-' + group.stage);
+                    });
+                }
+                
                 $('#conflict-details-desc').html(desc);
-
-                $('#btn-configure-override').off('click').on('click', function(){
-                    // Precisamos achar o banner completo.
-                    var $row = $('#table-overrides-banners input[value="'+group.cb_id+'"]').closest('tr');
-                    $row.find('.btn-edit-custom-banner').click();
-                });
-
-                $('#btn-configure-stage').off('click').on('click', function(){
-                    switchTab('#tab-' + group.stage);
-                });
 
                 var tbody = '';
                 group.links.forEach(function(link){
                     tbody += `<tr>
                         <td><strong>${link.title}</strong><br><small><a href="${link.url}" target="_blank">${link.url}</a></small></td>
                         <td>
-                            <button type="button" class="button button-small btn-highlight-override-link" data-cb="${group.cb_id}" data-url="${link.url}">Destacar no Override</button>
+                            <a href="post.php?post=${link.id}&action=edit" target="_blank" class="button button-small">Editar Post</a>
                             <button type="button" class="button button-small btn-highlight-list-link" data-id="${link.id}">Destacar em Classificados</button>
                         </td>
                     </tr>`;
@@ -3071,7 +3313,7 @@ class FunnelCTAManager {
     }
 
     public function render_meta_box($post) {
-        $value = get_post_meta($post->ID, '_fcm_stage', true);
+        $assigned_stages = $this->get_post_stages($post->ID);
         wp_nonce_field('fcm_save_nonce', 'fcm_nonce');
         
         $options = get_option($this->option_name);
@@ -3079,24 +3321,51 @@ class FunnelCTAManager {
         $label_meio = isset($options['label_meio']) && !empty($options['label_meio']) ? $options['label_meio'] : 'Meio de Funil';
         $label_fundo = isset($options['label_fundo']) && !empty($options['label_fundo']) ? $options['label_fundo'] : 'Fundo de Funil';
         $custom_funnels = $this->get_custom_funnels();
+
+        $all_available_funnels = [
+            'topo'  => $label_topo,
+            'meio'  => $label_meio,
+            'fundo' => $label_fundo,
+        ];
+        foreach ($custom_funnels as $cf_id => $cf) {
+            $all_available_funnels[$cf_id] = $cf['name'];
+        }
         ?>
-        <select name="fcm_stage" style="width:100%">
-            <option value="">Padrão (Fallback Automático)</option>
-            <option value="topo" <?php selected($value, 'topo'); ?>><?php echo esc_html($label_topo); ?></option>
-            <option value="meio" <?php selected($value, 'meio'); ?>><?php echo esc_html($label_meio); ?></option>
-            <option value="fundo" <?php selected($value, 'fundo'); ?>><?php echo esc_html($label_fundo); ?></option>
-            <?php foreach ($custom_funnels as $cf_id => $cf): ?>
-                <option value="<?php echo esc_attr($cf_id); ?>" <?php selected($value, $cf_id); ?>><?php echo esc_html($cf['name']); ?></option>
+        <p style="font-weight:600; margin-bottom:8px; margin-top:0;">Selecione os Funis deste Post:</p>
+        <div style="max-height: 180px; overflow-y: auto; padding: 8px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+            <?php foreach ($all_available_funnels as $f_id => $f_name): ?>
+                <label style="display:block; margin-bottom:6px; font-weight:normal; cursor:pointer;">
+                    <input type="checkbox" name="fcm_stages[]" value="<?php echo esc_attr($f_id); ?>" <?php checked(in_array($f_id, $assigned_stages)); ?>>
+                    <?php echo esc_html($f_name); ?>
+                </label>
             <?php endforeach; ?>
-        </select>
-        <p class="description" style="margin-top: 10px;">Atenção: Se este post estiver nas regras de um "Banner de Override", as configurações de funil acima serão ignoradas.</p>
+        </div>
+        <p class="description" style="margin-top: 10px;">É possível selecionar múltiplos funis. Caso haja conflito de posição entre eles, consulte o <strong>Monitor de Conflitos</strong>.</p>
+        <p class="description" style="margin-top: 5px;">Atenção: Se este post possuir um "Banner de Override" exclusivo, os banners de funil serão substituídos pelo override.</p>
         <?php
     }
 
     public function save_funnel_meta_box($post_id) {
         if (!isset($_POST['fcm_nonce']) || !wp_verify_nonce($_POST['fcm_nonce'], 'fcm_save_nonce')) return;
         if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) return;
-        if (isset($_POST['fcm_stage'])) update_post_meta($post_id, '_fcm_stage', sanitize_text_field($_POST['fcm_stage']));
+        
+        if (isset($_POST['fcm_stages']) && is_array($_POST['fcm_stages'])) {
+            $stages = array_values(array_filter(array_map('sanitize_text_field', $_POST['fcm_stages'])));
+            if (!empty($stages)) {
+                update_post_meta($post_id, '_fcm_stage', $stages);
+            } else {
+                delete_post_meta($post_id, '_fcm_stage');
+            }
+        } elseif (isset($_POST['fcm_stage'])) {
+            $stg = sanitize_text_field($_POST['fcm_stage']);
+            if ($stg) {
+                update_post_meta($post_id, '_fcm_stage', [$stg]);
+            } else {
+                delete_post_meta($post_id, '_fcm_stage');
+            }
+        } else {
+            delete_post_meta($post_id, '_fcm_stage');
+        }
     }
 
     /* -------------------------------------------------------------------------
@@ -3427,26 +3696,35 @@ class FunnelCTAManager {
         $has_stage_banner = false;
 
         if (!$override_blocks_others) {
-            $stage = get_post_meta($post_id, '_fcm_stage', true);
-            $stage_to_use = null;
+            $stages = $this->get_post_stages($post_id);
+            $stages_to_use = [];
 
-            if ($stage) {
-                $stage_pts = isset($options[$stage . '_post_types']) ? (array)$options[$stage . '_post_types'] : [];
-                $pt_allowed = empty($stage_pts) || in_array($post_type, $stage_pts);
+            if (!empty($stages)) {
+                foreach ($stages as $stg) {
+                    // Se o funil estiver em modo shortcode, ele NÃO entra na injeção automática no texto
+                    if (!empty($options[$stg . '_use_shortcode'])) {
+                        continue;
+                    }
 
-                if ($pt_allowed && $this->is_banner_active($options, $stage)) {
-                    $stage_to_use = $stage;
-                } else {
-                    $default_status = isset($options['default_status']) ? $options['default_status'] : 'active';
-                    $excluded_posts = isset($options['excluded_posts']) ? (array)$options['excluded_posts'] : [];
-                    
-                    if ($default_status === 'active' && !in_array($post_id, $excluded_posts) && $this->is_banner_active($options, 'padrao')) {
-                        $stage_to_use = 'padrao';
+                    $stage_pts = isset($options[$stg . '_post_types']) ? (array)$options[$stg . '_post_types'] : [];
+                    $pt_allowed = empty($stage_pts) || in_array($post_type, $stage_pts);
+
+                    if ($pt_allowed && $this->is_banner_active($options, $stg)) {
+                        $stages_to_use[] = $stg;
                     }
                 }
             }
 
-            if ($stage_to_use) {
+            if (empty($stages_to_use) && empty($stages)) {
+                $default_status = isset($options['default_status']) ? $options['default_status'] : 'active';
+                $excluded_posts = isset($options['excluded_posts']) ? (array)$options['excluded_posts'] : [];
+                
+                if ($default_status === 'active' && !in_array($post_id, $excluded_posts) && $this->is_banner_active($options, 'padrao')) {
+                    $stages_to_use[] = 'padrao';
+                }
+            }
+
+            foreach ($stages_to_use as $stage_to_use) {
                 $html = $this->generate_banner_html_from_options($options, $stage_to_use);
                 if ($html) {
                     $pos = get_post_meta($post_id, '_fcm_position_override', true);
@@ -3737,6 +4015,64 @@ class FunnelCTAManager {
         return $out;
     }
 
+    private static $rendered_shortcode_stages = [];
+
+    public function render_fcm_funnel_shortcode($atts) {
+        $atts = shortcode_atts(['stage' => '', 'id' => ''], $atts, 'fcm_funnel');
+        $requested_stage = !empty($atts['stage']) ? $atts['stage'] : $atts['id'];
+
+        if (empty($requested_stage)) {
+            return $this->render_fcm_funnel_shared_shortcode($atts);
+        }
+
+        $post_id = get_the_ID();
+        if (!$post_id && is_singular()) {
+            $post_id = get_queried_object_id();
+        }
+        if (!$post_id) return '';
+
+        $post_stages = $this->get_post_stages($post_id);
+        if (!in_array($requested_stage, $post_stages)) return '';
+
+        $options = get_option($this->option_name);
+        if (!$this->is_banner_active($options, $requested_stage)) return '';
+
+        if (isset(self::$rendered_shortcode_stages[$post_id][$requested_stage])) {
+            return '';
+        }
+
+        self::$rendered_shortcode_stages[$post_id][$requested_stage] = true;
+        return $this->generate_banner_html_from_options($options, $requested_stage);
+    }
+
+    public function render_fcm_funnel_shared_shortcode($atts) {
+        $post_id = get_the_ID();
+        if (!$post_id && is_singular()) {
+            $post_id = get_queried_object_id();
+        }
+        if (!$post_id) return '';
+
+        $post_stages = $this->get_post_stages($post_id);
+        if (empty($post_stages)) return '';
+
+        $options = get_option($this->option_name);
+        $output = '';
+
+        foreach ($post_stages as $stage) {
+            $use_sc = !empty($options[$stage . '_use_shortcode']);
+            $allow_shared = !empty($options[$stage . '_allow_shared_shortcode']);
+
+            if ($use_sc && $allow_shared && $this->is_banner_active($options, $stage)) {
+                if (!isset(self::$rendered_shortcode_stages[$post_id][$stage])) {
+                    self::$rendered_shortcode_stages[$post_id][$stage] = true;
+                    $output .= $this->generate_banner_html_from_options($options, $stage);
+                }
+            }
+        }
+
+        return $output;
+    }
+
 
     private function get_banner_end_timestamp($id) {
         $custom = get_option($this->custom_banners_option, []);
@@ -4010,7 +4346,9 @@ class FunnelCTAManager {
         foreach ($pending_rows as $row) {
             $post_id = $this->find_post_strict($row['raw_url']);
             if ($post_id) {
-                update_post_meta($post_id, '_fcm_stage', $row['target_stage']);
+                $existing = $this->get_post_stages($post_id);
+                $merged = array_values(array_unique(array_merge($existing, [$row['target_stage']])));
+                update_post_meta($post_id, '_fcm_stage', $merged);
                 $success_count++;
             } else {
                 $unresolved[] = $row;
@@ -4023,7 +4361,9 @@ class FunnelCTAManager {
             foreach ($unresolved as $row) {
                 $post_id = $this->find_post_strict($row['raw_url']);
                 if ($post_id) {
-                    update_post_meta($post_id, '_fcm_stage', $row['target_stage']);
+                    $existing = $this->get_post_stages($post_id);
+                    $merged = array_values(array_unique(array_merge($existing, [$row['target_stage']])));
+                    update_post_meta($post_id, '_fcm_stage', $merged);
                     $success_count++;
                 } else {
                     $still_unresolved[] = $row;
@@ -4038,7 +4378,9 @@ class FunnelCTAManager {
             foreach ($unresolved as $row) {
                 $post_id = $this->find_post_strict($row['raw_url']);
                 if ($post_id) {
-                    update_post_meta($post_id, '_fcm_stage', $row['target_stage']);
+                    $existing = $this->get_post_stages($post_id);
+                    $merged = array_values(array_unique(array_merge($existing, [$row['target_stage']])));
+                    update_post_meta($post_id, '_fcm_stage', $merged);
                     $success_count++;
                 } else {
                     $final_unresolved[] = [
