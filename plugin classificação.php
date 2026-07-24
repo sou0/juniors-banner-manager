@@ -2407,55 +2407,71 @@ class FunnelCTAManager {
                 $('#fcm-import-step-2').hide();
                 $('#fcm-import-step-3').hide();
                 $('#fcm-import-progress').show();
-                $('#fcm-import-progress-text').text('Processando planilha e efetuando 3 tentativas automáticas de localização dos posts...');
+                $('#fcm-import-progress-text').text('Processando planilha e efetuando busca dos posts...');
 
-                $.post(ajaxurl, {
-                    action: 'fcm_import_classified',
-                    data: csvContent,
-                    funnel_map: funnelMap
-                }, function(res){
-                    $('#fcm-import-progress').hide();
-                    $('#fcm-import-step-3').show();
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    timeout: 45000,
+                    data: {
+                        action: 'fcm_import_classified',
+                        data: csvContent,
+                        funnel_map: funnelMap
+                    },
+                    success: function(res){
+                        $('#fcm-import-progress').hide();
+                        $('#fcm-import-step-3').show();
 
-                    if (res && res.success) {
-                        var data = res.data;
-                        currentFailedItems = data.failed_items || [];
+                        if (res && res.success) {
+                            var data = res.data;
+                            currentFailedItems = data.failed_items || [];
 
-                        var summaryHtml = '<div style="background:#e7f4e8; border:1px solid #7ad03a; color:#2e6a30; padding:12px 15px; border-radius:4px;">' +
-                            '<h4 style="margin:0 0 5px 0; font-size:1.1em;">Processamento Concluído!</h4>' +
-                            'Total de registros analisados: <strong>' + data.total + '</strong><br>' +
-                            '✅ <strong>Importados/Atualizados com Sucesso:</strong> ' + data.success_count + '<br>' +
-                            '❌ <strong>Posts Não Encontrados após 3 tentativas:</strong> ' + data.failed_count +
-                            '</div>';
+                            if (data.failed_count === 0) {
+                                var summaryHtml = '<div style="background:#d4edda; border:1px solid #c3e6cb; color:#155724; padding:15px 20px; border-radius:6px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">' +
+                                    '<h4 style="margin:0 0 8px 0; font-size:1.2em; color:#155724;">🎉 Importação Concluída com Sucesso Total!</h4>' +
+                                    'Confirmado: <strong>0 erros identificados!</strong> Todos os <strong>' + data.success_count + '</strong> posts foram localizados, classificados e vinculados perfeitamente aos seus funis.' +
+                                    '</div>';
 
-                        $('#fcm-import-summary-box').html(summaryHtml);
+                                $('#fcm-import-summary-box').html(summaryHtml);
+                                $('#fcm-import-failed-details').hide();
+                                $('#btn-retry-failed-import').hide();
+                                $('#btn-download-failed-csv').hide();
+                            } else {
+                                var summaryHtml = '<div style="background:#fff3cd; border:1px solid #ffeba2; color:#856404; padding:15px 20px; border-radius:6px; box-shadow:0 2px 4px rgba(0,0,0,0.05);">' +
+                                    '<h4 style="margin:0 0 8px 0; font-size:1.1em; color:#856404;">Importação Concluída com Pendências</h4>' +
+                                    'Total de registros no CSV: <strong>' + data.total + '</strong><br>' +
+                                    '✅ <strong>Importados/Atualizados com Sucesso:</strong> ' + data.success_count + '<br>' +
+                                    '❌ <strong>Posts Não Encontrados:</strong> ' + data.failed_count +
+                                    '</div>';
 
-                        if (data.failed_count > 0) {
-                            var $failedTbody = $('#fcm-csv-failed-tbody').empty();
-                            currentFailedItems.forEach(function(item){
-                                $failedTbody.append('<tr>' +
-                                    '<td>' + item.line + '</td>' +
-                                    '<td><code>' + escapeHtml(item.url) + '</code></td>' +
-                                    '<td>' + escapeHtml(item.stage) + '</td>' +
-                                    '</tr>');
-                            });
+                                $('#fcm-import-summary-box').html(summaryHtml);
 
-                            $('#fcm-import-failed-details').show();
-                            $('#btn-retry-failed-import').show();
-                            $('#btn-download-failed-csv').show();
+                                var $failedTbody = $('#fcm-csv-failed-tbody').empty();
+                                currentFailedItems.forEach(function(item){
+                                    $failedTbody.append('<tr>' +
+                                        '<td>' + item.line + '</td>' +
+                                        '<td><code>' + escapeHtml(item.url) + '</code></td>' +
+                                        '<td>' + escapeHtml(item.stage) + '</td>' +
+                                        '</tr>');
+                                });
+
+                                $('#fcm-import-failed-details').show();
+                                $('#btn-retry-failed-import').show();
+                                $('#btn-download-failed-csv').show();
+                            }
                         } else {
-                            $('#fcm-import-failed-details').hide();
-                            $('#btn-retry-failed-import').hide();
-                            $('#btn-download-failed-csv').hide();
+                            var errMsg = (res && res.data) ? res.data : 'Erro ao processar o CSV.';
+                            $('#fcm-import-summary-box').html('<div style="background:#fcf0f1; border:1px solid #d63638; color:#d63638; padding:12px 15px; border-radius:4px;">' + escapeHtml(errMsg) + '</div>');
                         }
-                    } else {
-                        var errMsg = (res && res.data) ? res.data : 'Erro na importação.';
-                        $('#fcm-import-summary-box').html('<div style="background:#fcf0f1; border:1px solid #d63638; color:#d63638; padding:12px 15px; border-radius:4px;">' + escapeHtml(errMsg) + '</div>');
+                    },
+                    error: function(jqXHR, textStatus, errorThrown){
+                        $('#fcm-import-progress').hide();
+                        $('#fcm-import-step-3').show();
+                        var msg = (textStatus === 'timeout') 
+                            ? 'O tempo limite de resposta do servidor expirou. Se o arquivo for muito grande, recarregue a página para conferir os posts que subiram.' 
+                            : 'Erro de comunicação com o servidor durante a importação: ' + (errorThrown || textStatus);
+                        $('#fcm-import-summary-box').html('<div style="background:#fcf0f1; border:1px solid #d63638; color:#d63638; padding:12px 15px; border-radius:4px;">' + escapeHtml(msg) + '</div>');
                     }
-                }).fail(function(){
-                    $('#fcm-import-progress').hide();
-                    $('#fcm-import-step-3').show();
-                    $('#fcm-import-summary-box').html('<div style="background:#fcf0f1; border:1px solid #d63638; color:#d63638; padding:12px 15px; border-radius:4px;">Erro de comunicação com o servidor durante a importação.</div>');
                 });
             }
 
